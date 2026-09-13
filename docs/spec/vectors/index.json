@@ -1,0 +1,72 @@
+[
+  {
+    "name": "verified",
+    "expected_status": "verified",
+    "note": "The block as signed."
+  },
+  {
+    "name": "verified_after_transport",
+    "expected_status": "verified",
+    "note": "Quoted with '> ', one line re-wrapped: canonical text unchanged."
+  },
+  {
+    "name": "invalid_signature",
+    "expected_status": "invalid_signature",
+    "note": "One word of the instruction changed after signing."
+  },
+  {
+    "name": "metadata_mismatch",
+    "expected_status": "metadata_mismatch",
+    "note": "A clear metadata line edited; the signed header is intact."
+  },
+  {
+    "name": "expired",
+    "expected_status": "expired",
+    "note": ""
+  },
+  {
+    "name": "not_yet_valid",
+    "expected_status": "not_yet_valid",
+    "note": "Issued more than 60 s after `now`."
+  },
+  {
+    "name": "audience_mismatch",
+    "expected_status": "audience_mismatch",
+    "note": "Block audience acme/ci-agent presented to acme/dev-agent."
+  },
+  {
+    "name": "unknown_signer",
+    "expected_status": "unknown_signer",
+    "note": "Signer not in the registry."
+  },
+  {
+    "name": "unknown_key",
+    "expected_status": "unknown_key",
+    "note": "Signer is enrolled, this kid is not."
+  },
+  {
+    "name": "unknown_key_wrong_signer",
+    "expected_status": "unknown_key",
+    "note": "An enrolled kid used with a different iss."
+  },
+  {
+    "name": "dev_key_in_enforced_mode",
+    "expected_status": "dev_key_in_enforced_mode",
+    "note": "Same block, verifier in enforced mode."
+  },
+  {
+    "name": "malformed_not_detached",
+    "expected_status": "malformed",
+    "note": "A payload segment is present; a block must be a detached JWS."
+  },
+  {
+    "name": "malformed_unknown_canon",
+    "expected_status": "malformed",
+    "note": "Header names a canonicalization rule the verifier does not know."
+  },
+  {
+    "name": "revoked",
+    "expected_status": "revoked",
+    "note": "The key is marked revoked in the registry."
+  }
+]

@@ -1,0 +1,10 @@
+---
+title: sib.classifier
+---
+
+```api
+package: sib.classifier
+source: .
+members: true
+inherited: false
+```

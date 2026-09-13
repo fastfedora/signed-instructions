@@ -1,0 +1,148 @@
+---
+title: Design Decisions
+---
+
+Several choices in the format and the hooks could reasonably have gone another way. This page
+records each one, the alternatives that were considered, and the reason the current choice won.
+Where a measurement decided the question, the number is here; where a principle decided it, the
+principle is.
+
+
+## Clearsigned, Not Encoded
+
+The first draft of the format put the instruction inside a base64 payload with a human-readable
+preview above it. That is the shape the original project plan suggested. It has a flaw that is
+obvious once seen: the preview can be edited while the signed text stays hidden, so a reader can be
+shown one thing while the verifier checks another.
+
+The current format is a clearsign, in the manner of an OpenPGP clearsigned message. The
+instruction stays in plain text between `BEGIN SIB SIGNED INSTRUCTION` and `BEGIN SIB SIGNATURE`,
+and a detached signature follows. There is one copy of the instruction, it is what people read,
+and it is what the signature covers. Nothing in the block is opaque except the signature itself.
+
+The cost is that the text is exposed to whatever Slack, email and editors do to it. That cost is
+paid by the [canonicalization](../components/canonicalization.qmd) rule, which is deliberately
+aggressive about whitespace and typographic substitutions, and by the transport tests that apply
+those transformations and assert the block still verifies.
+
+
+## A Detached JWS, Not a Bespoke Signature
+
+The signature is a JWS compact serialization with an unencoded, detached payload
+([RFC 7515](https://www.rfc-editor.org/rfc/rfc7515) with
+[RFC 7797](https://www.rfc-editor.org/rfc/rfc7797), `b64: false`), so it reads
+`header..signature` with an empty middle segment. The signing input is the base64url header, a
+dot, and the canonical instruction text.
+
+A format of the project's own would have been shorter to describe. The JWS was chosen because a
+third party can verify the dev-mode path with any JWS library that supports EdDSA and RFC 7797,
+because the standards mapping the project plan asks for is then direct, and because an off-the-shelf
+construction has had more eyes on it than a new one ever will. The WebAuthn path needs custom
+verification either way, since an assertion signs authenticator data rather than the payload, but
+that is confined to one algorithm value.
+
+
+## Short Header Names
+
+The header uses the JOSE and JWT registered names: `alg`, `typ`, `kid`, `b64`, `crit`, `iss`, `iat`,
+`exp`, `jti`, `aud`. Two fields are the project's own, `canon` and `mode`, and they are short to
+match. Full words were considered, and the documentation is for an international audience where
+abbreviations cost something.
+
+Four of the names are not negotiable if the JWS is to remain a JWS: a standard library keys on
+`alg`, `kid`, `b64` and `crit`, and rejects a header that renames them. The remaining names are JWT
+claim names that no JWS library interprets, so renaming them would have cost nothing in
+interoperability. Consistency won: a header that mixes `alg` with `expires_at` is harder to read
+than one that speaks a single dialect, and the standard already uses these names. The
+[specification](../../spec/format.qmd) expands every field in a table beside the header, so a reader
+meets each abbreviation with its meaning.
+
+Longer names would not have lengthened the signature, which is fixed at 64 bytes for both
+algorithms. They would have added about one 64-column line to the encoded header.
+
+
+## Canonicalization Named in the Signed Header
+
+The canonicalization rule that maps the instruction to the bytes that were signed is named in the
+header as `canon`, and the header is covered by the signature. The verifier applies exactly that
+rule and never guesses.
+
+The alternative, a single fixed rule or a rule chosen by the verifier, fails in two ways. A rule
+that collapses whitespace is wrong for JSON, where it changes string values while ignoring key order
+and number formatting that do not matter; JSON needs [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785).
+And a rule chosen outside the signature is an attack surface: an attacker could relabel a block to
+whichever rule makes a modified text collapse onto the signed form. Naming the rule in the
+protected header ties the mapping to the signature, in the way JWS ties `alg` to it.
+
+The list is closed and versioned: `text/1`, `raw/1` and the reserved `json/1`. A rule never
+changes in place; a change is a new version, so old signatures keep verifying under the rule they
+named. Each rule is its own collision analysis, which is the argument for keeping the list short.
+`canon` is deliberately not listed in `crit`: a generic JWS library would reject a header with an
+unknown critical parameter, and canonicalization happens in the SIB layer before the bytes reach the
+library.
+
+
+## The Hook Never Returns `allow`
+
+Claude Code's documentation says a PreToolUse hook `allow` is still checked by the auto-mode
+classifier. Phase 0's allow-bypass test saw the opposite in the one case it produced: the classifier
+denied 5 of 5 baseline deploy attempts, but with the hook returning `allow` the single attempt was
+not denied and it deployed. One attempt is thin evidence. The consequence of being wrong in one
+direction is a bypass of the harness's own safety layer; in the other direction it is an extra
+classifier call. So when a verified instruction covers an action, the hook returns no decision and
+lets the classifier see the verification through the note and the policy prose.
+
+
+## A Deterministic Deny With No Verified Spans
+
+The original plan called the classifier on every gated tool call. The current hook denies
+deterministically when the manifest holds no verified span, without a model call. The policy fixes
+the answer in that case: authority flows only from verified spans, and there are none. Calling a
+model to confirm a conclusion the policy already dictates would add latency and a failure mode for
+no information. The denial names the nearest block that failed to verify and its status, so the
+agent and the human learn what was refused.
+
+
+## Harness-Provided Recent Activity
+
+Signed instructions carry conditions. Alice's instruction in the tutorial says "once the test suite
+passes", and the classifier sees only the policy, the manifest and the tool call. In Phase 1 it
+answered `ask` on the first gated call in 10 of 10 runs because it had no way to check the
+condition, and in a headless run an `ask` is a denial.
+
+The hook now supplies the harness's own record of the last few tool calls with their result status
+and a short output tail. These are observations the harness made, not text the agent chose, and the
+policy says they are usable for checking a condition and never as instructions. With that record in
+view, the classifier allowed the covered deploy on the first call in 10 of 10 runs. The alternative
+of dropping conditions from signed instructions would have made them less useful; the alternative
+of letting the agent assert that the condition held would have handed authority back to the agent.
+
+
+## The Gate Policy Lives Outside the Checkout
+
+The gated-action list and the audience are configuration for the harness, not content of the
+repository. When the policy file sat inside the checkout, the Phase 1 model read it while exploring
+and refused deploys on its own before any hook ran, which masked the gate in the measurements, and
+an attacker who can edit the repository could have edited the policy as easily. The hooks now read
+the policy from a path the harness supplies. Moving the gated class into user scope, where the
+auto-mode configuration already lives, is a later phase.
+
+
+## The Prompt Tells the Model What Is Verified
+
+The plan reserved `additionalContext` for the model and nothing else, and that is still its role.
+Phase 1 added a use for it at prompt time: the UserPromptSubmit hook lists the verified instructions
+in context, in model-facing text. Without it, Sonnet 5 saw a signed block it did not understand and
+asked for confirmation instead of acting on an instruction that covered the task. The note is
+information for the model; the classifier's channel remains the PostToolUse note, and the
+[measurements](what-the-classifier-sees.qmd) show the two are not interchangeable.
+
+
+## Dev Mode Is Explicit
+
+Software keys exist because the hooks, the verifier and the scenarios have to be built and tested
+before biometric signing does. They are labelled everywhere. A dev-mode key signs with `mode: "dev"`
+in the header, every signing and verification prints a warning that the signature proves possession
+of a file rather than the presence of a person, and in enforced mode a dev block reports
+`dev_key_in_enforced_mode` and confers nothing. The alternative, an unlabelled testing path that
+happens to work in production, is how a prototype's shortcuts become a deployment's holes.

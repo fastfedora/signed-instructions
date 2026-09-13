@@ -1,0 +1,75 @@
+website:
+  sidebar:
+  - title: Reference
+    style: docked
+    collapse-level: 2
+    contents:
+    - reference/index.qmd
+    - section: Python API
+      contents:
+      - section: canon
+        href: reference/canon.qmd
+        contents:
+        - text: raw_1
+          href: reference/canon.qmd#raw_1
+        - text: text_1
+          href: reference/canon.qmd#text_1
+      - section: header
+        href: reference/header.qmd
+        contents:
+        - text: parse_time
+          href: reference/header.qmd#parse_time
+        - text: signing_input
+          href: reference/header.qmd#signing_input
+      - section: envelope
+        href: reference/envelope.qmd
+        contents:
+        - text: extract
+          href: reference/envelope.qmd#extract
+      - section: keys_dev
+        href: reference/keys_dev.qmd
+        contents:
+        - text: generate
+          href: reference/keys_dev.qmd#generate
+      - section: registry
+        href: reference/registry.qmd
+        contents: []
+      - section: verify
+        href: reference/verify.qmd
+        contents:
+        - text: verify_block
+          href: reference/verify.qmd#verify_block
+      - section: manifest
+        href: reference/manifest.qmd
+        contents:
+        - text: render_classifier_note
+          href: reference/manifest.qmd#render_classifier_note
+      - section: nonce_store
+        href: reference/nonce_store.qmd
+        contents: []
+      - section: classifier
+        href: reference/classifier.qmd
+        contents:
+        - text: classify
+          href: reference/classifier.qmd#classify
+      - section: hooks
+        href: reference/hooks.qmd
+        contents:
+        - text: assemble_manifest
+          href: reference/hooks.qmd#assemble_manifest
+        - text: is_gated
+          href: reference/hooks.qmd#is_gated
+        - text: load_policy
+          href: reference/hooks.qmd#load_policy
+        - text: recent_activity
+          href: reference/hooks.qmd#recent_activity
+        - text: run_hook
+          href: reference/hooks.qmd#run_hook
+        - text: transcript_blocks
+          href: reference/hooks.qmd#transcript_blocks
+      - section: cli
+        href: reference/cli.qmd
+        contents: []
+      - section: b64
+        href: reference/b64.qmd
+        contents: []

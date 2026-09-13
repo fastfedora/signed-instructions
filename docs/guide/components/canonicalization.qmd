@@ -1,0 +1,115 @@
+---
+title: Canonicalization
+---
+
+Canonicalization turns the instruction as written into the exact bytes that are signed and later
+verified. Because a block travels through chat clients, mail servers and editors that quietly
+change quotes, spaces and line breaks, the rule has to be tolerant of those changes and strict
+about everything else. The rule is named in the signed header so that the verifier applies the one
+the signer used and never guesses.
+
+
+## Why the Rule Is Signed
+
+Canonicalization is an attack surface. If two different instructions canonicalize to the same
+bytes, one signature covers both, and an attacker who can swap the text has a valid signature over
+words the signer never approved. Naming the rule in the header, where the signature covers it,
+closes the simplest version of that attack: nobody can relabel a block to a rule under which a
+modified text collapses onto the signed form.
+
+Two consequences follow:
+
+- The list of rules is closed. A verifier that meets an unknown `canon` value reports `malformed`
+  and confers nothing.
+- Rules are versioned and never change in place. A change to the fold table below is `text/2`, not
+  a new `text/1`, so old signatures keep verifying under the rule they were made with.
+
+
+## Rules
+
+`text/1`
+: For prose instructions in chat, email and Markdown. The steps, in order, as implemented in
+  `text_1()`:
+
+  1. Unicode NFC normalization.
+  2. Typographic quotes folded to ASCII: U+2018, U+2019, U+201A and U+201B become `'`; U+201C,
+     U+201D, U+201E and U+201F become `"`.
+  3. Non-breaking spaces folded to a space: U+00A0, U+202F and U+2007.
+  4. Zero-width characters removed: U+200B, U+200C, U+200D and U+FEFF.
+  5. Every run of whitespace, including line breaks and tabs, collapsed to one space, and leading
+     and trailing whitespace removed.
+
+`raw/1`
+: Unicode NFC normalization and nothing else, as implemented in `raw_1()`. For file contents where
+  line structure carries meaning. A block signed with `raw/1` does not survive re-wrapping.
+
+`json/1`
+: Planned for Phase 3. [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785) over the parsed value, so
+  key order, number formatting and escapes are neutral while whitespace inside strings is
+  preserved. The block must parse as JSON or it is `malformed`. This is the carrier for signing a
+  specific tool call with its arguments.
+
+The rule applies only to the instruction text. The header is serialized with RFC 8785 regardless,
+because it is JSON.
+
+
+## Worked Examples
+
+Under `text/1`, all of the following canonicalize to the same string, so a signature over one
+verifies over the others:
+
+```text
+You may deploy the current main branch to staging with
+scripts/deploy.sh staging whenever the test suite passes.
+```
+
+```text
+You may deploy the current main branch
+to staging with scripts/deploy.sh staging
+whenever the test suite passes.
+```
+
+```text
+> You may deploy the current main branch to staging with scripts/deploy.sh staging whenever the test suite passes.
+```
+
+The third example assumes the `> ` prefix was on the marker lines too, so the
+[extractor](blocks.qmd#extraction) stripped it. A smart-quote substitution behaves the same way:
+
+```text
+“Deploy” now
+
+  to	staging​.
+```
+
+canonicalizes to `"Deploy" now to staging.`, with the curly quotes folded, the blank line and tab
+collapsed, and the zero-width space before the period removed.
+
+These do not canonicalize to the same string, and a signature over one fails over the other:
+
+- `to staging` and `to production`: a changed word.
+- `scripts/deploy.sh` and `scripts/ deploy.sh`: a space inside a token is a real change, because
+  runs of whitespace collapse to one space rather than to nothing.
+- `1,000` and `1.000`: punctuation is never folded.
+
+Under `raw/1` the first two prose examples differ, because the line breaks fall in different
+places.
+
+
+## The Collision Obligation
+
+Every rule maps many inputs onto one canonical form, and that is the point. The obligation that
+comes with it is to know which distinct inputs collide and to confirm that none of them differ in
+meaning. For `text/1` the collisions are, by construction, differences in whitespace, quote style
+and invisible characters, and the claim is that none of those changes what an instruction says.
+That claim is what the transport tests and the red team attack; any counterexample is a defect in
+the rule and would produce `text/2`.
+
+The same analysis is owed for each rule added, which is why the list stays short and why the
+specification does not include a YAML rule (no standard canonical form) or a Markdown-aware rule
+(chat clients mangle Markdown structure, so `text/1` is the right rule for Markdown content too).
+
+::: {.callout-warning}
+A verifier applies only the rule the header names. Retrying under another rule when the first
+fails would reintroduce the collision search the signed field exists to prevent.
+:::

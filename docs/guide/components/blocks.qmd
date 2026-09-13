@@ -1,0 +1,204 @@
+---
+title: Blocks and Signatures
+aliases:
+  - /guide/components/
+---
+
+A signed instruction block is a clearsigned message: the instruction stays in plain text, and a
+detached signature follows it. This page walks through one real block, what each part is for, what
+the signature does and does not cover, and how the extractor finds a block after a trip through a
+chat client.
+
+
+## A Block
+
+The block below was produced by `sib sign` with a dev-mode key. The instruction is exactly what
+Alice typed; the signature block below it is what the tool added.
+
+```text
+-----BEGIN SIB SIGNED INSTRUCTION-----
+You may deploy the current main branch to staging with
+scripts/deploy.sh staging whenever the test suite passes.
+-----BEGIN SIB SIGNATURE-----
+Signer: alice@example.com
+Expires: 2026-09-13T22:06:30Z
+Audience: acme/dev-agent
+
+eyJhbGciOiJFZERTQSIsImF1ZCI6ImFjbWUvZGV2LWFnZW50IiwiYjY0IjpmYWxz
+ZSwiY2Fub24iOiJ0ZXh0LzEiLCJjcml0IjpbImI2NCJdLCJleHAiOiIyMDI2LTA5
+LTEzVDIyOjA2OjMwWiIsImlhdCI6IjIwMjYtMDktMTNUMTQ6MDY6MzBaIiwiaXNz
+IjoiYWxpY2VAZXhhbXBsZS5jb20iLCJqdGkiOiJjcGVfV2Zla0xIdkc5SC1vIiwi
+a2lkIjoiYWxpY2VAZXhhbXBsZS5jb20jZGV2LTIwMjYtMDkiLCJtb2RlIjoiZGV2
+IiwidHlwIjoiU0lCLzEifQ..8k1U6vxXMv7QJhNSIJbg0NsFk6C5T51ubZcoE9hZ
+mgigggId48NFAhlzANHKRmIjtHJh54jYgQxgBw75lKyfAQ
+-----END SIB SIGNATURE-----
+```
+
+The block has three parts:
+
+Instruction
+: Everything between `BEGIN SIB SIGNED INSTRUCTION` and `BEGIN SIB SIGNATURE`. This is the text
+  the signer saw and approved, and it is the only copy of the instruction in the block. The
+  verifier canonicalizes it and checks the signature over the result.
+
+Clear metadata lines
+: `Signer`, `Expires` and `Audience`, followed by a blank line. They exist so a person reading a
+  file or a chat message can see who signed and until when without decoding anything. They are
+  convenience copies of values in the signed header; the verifier compares them with the header
+  and reports `metadata_mismatch` if someone has edited them.
+
+Detached signature
+: The base64url text up to `END SIB SIGNATURE`, wrapped at 64 columns. It is a JWS compact
+  serialization with an unencoded, detached payload
+  ([RFC 7515](https://www.rfc-editor.org/rfc/rfc7515) with
+  [RFC 7797](https://www.rfc-editor.org/rfc/rfc7797)), so it reads `header..signature` with an
+  empty middle segment: the payload is the instruction above, not something encoded here.
+
+Nothing in the block is opaque except the signature bytes. There is one copy of the instruction,
+it is what people read, and it is what the signature covers.
+
+::: {.callout-note}
+An earlier design put the instruction inside the base64 payload with a human-readable preview
+above it. That let the preview be edited while the signed text stayed hidden. Clearsigning removed
+the gap. See [Design Decisions](../deep-dives/design-decisions.qmd).
+:::
+
+
+## The Header
+
+The first segment of the signature decodes to a JSON object serialized with
+[RFC 8785](https://www.rfc-editor.org/rfc/rfc8785) rules (sorted keys, no whitespace). `sib inspect`
+prints it:
+
+```json
+{
+  "alg": "EdDSA",
+  "kid": "alice@example.com#dev-2026-09",
+  "canon": "text/1",
+  "iss": "alice@example.com",
+  "iat": "2026-09-13T14:06:30Z",
+  "exp": "2026-09-13T22:06:30Z",
+  "jti": "cpe_WfekLHvG9H-o",
+  "mode": "dev",
+  "aud": "acme/dev-agent",
+  "typ": "SIB/1",
+  "b64": false,
+  "crit": ["b64"]
+}
+```
+
+Field names follow JOSE and JWT where a registered name exists, so a standard JWS library reads the
+header unchanged. Two fields are SIB's own.
+
+| Field | Meaning | Source |
+|---|---|---|
+| `alg` | Signature algorithm from a closed list; `none` is never accepted. Phase 1 supports `EdDSA`. | JWS |
+| `typ` | Envelope type and version, `SIB/1`. | JWS |
+| `kid` | Key identifier, looked up in the [signer registry](keys.qmd). | JWS |
+| `b64`, `crit` | The payload is unencoded and detached; `crit` makes `b64` mandatory to understand. | RFC 7797 |
+| `canon` | The [canonicalization](canonicalization.qmd) rule applied to the instruction before signing. | SIB |
+| `iss` | Issuer: the signer's stable identifier. | JWT |
+| `iat`, `exp` | Issued at and expires at, RFC 3339 in UTC. | JWT |
+| `jti` | Unique identifier for this block; the replay nonce. | JWT |
+| `aud` | Audience: the deployment or harness that may honor the block. | JWT |
+| `mode` | `dev` or `enforced`. A dev block confers nothing in enforced mode. | SIB |
+
+`canon` is deliberately not listed in `crit`. A generic JWS library must be able to accept the
+header, and canonicalization happens in the SIB layer before the bytes reach the library. The SIB
+verifier itself treats an unknown `canon` value as `malformed`.
+
+
+## What the Signature Covers
+
+The signing input is the RFC 7797 form:
+
+```text
+BASE64URL(header) || "." || canonical instruction text
+```
+
+For the block above, under `text/1`, the canonical text is one line:
+
+```text
+You may deploy the current main branch to staging with scripts/deploy.sh staging whenever the test suite passes.
+```
+
+So the signature covers:
+
+- **Every header field**: signer, key, times, nonce, audience, mode and the canonicalization rule.
+  None can be changed without invalidating the signature.
+- **The instruction's words**: change one character of a word and the signature fails. Changing
+  `staging` to `production` in the block above yields `invalid_signature`.
+
+It does not cover:
+
+- **Line structure and spacing**: under `text/1` every run of whitespace, including line breaks,
+  collapses to one space before signing. A re-wrapped copy verifies. If line structure matters,
+  sign with `raw/1`.
+- **The clear metadata lines**: they are checked for consistency with the header, not signed
+  directly. Editing them produces `metadata_mismatch`, not `invalid_signature`.
+- **Anything outside the markers**: surrounding prose has no authority, whatever it says.
+
+
+## Extraction
+
+`extract()` in `sib.envelope` finds every block in a document and returns its instruction text,
+its signature and its clear lines, along with byte offsets. It is tolerant on purpose, because a
+block that has passed through Slack, email or a Markdown renderer rarely comes back byte for byte:
+
+- **Dash variants**: marker lines match `-----`, `—---` and the other dash characters editors
+  substitute for a run of hyphens.
+- **Common prefix**: whatever precedes the dashes on the opening marker line (e.g., `> `, `# `,
+  `// `) is stripped from every line of the block. A blank quoted line (`>`) is treated as blank.
+- **Re-wrapping**: inside the signature segment, everything that is not a base64url character or a
+  dot is discarded, so the 64-column wrapping can change freely.
+- **Unterminated fragments**: a `BEGIN` without its `END` is skipped, never guessed at.
+
+The extractor never alters the instruction text beyond prefix stripping; canonicalization is the
+verifier's job. The block above, quoted with `> ` and with its markers changed to em dashes, still
+verifies:
+
+```text
+--- block 1 (chars 9-767, prefix '> ')
+text as written:
+You may deploy the current main branch to staging with
+```
+
+Blocks are recognized only inside the markers. A file can hold several; each is verified on its own
+and unsigned text between them confers no privilege.
+
+
+## Inspecting a Block
+
+`sib inspect` decodes without verifying, which is useful when a block fails and you want to see what
+it claims:
+
+```bash
+sib inspect block.txt
+```
+
+```text
+--- block 1 (chars 0-729, prefix '')
+text as written:
+You may deploy the current main branch to staging with
+scripts/deploy.sh staging whenever the test suite passes.
+clear lines: {"Signer": "alice@example.com", "Expires": "2026-09-13T22:06:30Z", "Audience": "acme/dev-agent"}
+header: {
+  "alg": "EdDSA",
+  "kid": "alice@example.com#dev-2026-09",
+  "canon": "text/1",
+  "iss": "alice@example.com",
+  "iat": "2026-09-13T14:06:30Z",
+  "exp": "2026-09-13T22:06:30Z",
+  "jti": "cpe_WfekLHvG9H-o",
+  "mode": "dev",
+  "aud": "acme/dev-agent",
+  "typ": "SIB/1",
+  "b64": false,
+  "crit": [
+    "b64"
+  ]
+}
+signature: 8k1U6vxXMv7QJhNSIJbg0NsFk6C5T51u...
+```
+
+To check the signature, use [`sib verify`](verifier.qmd#verifying-from-the-command-line).

@@ -1,0 +1,10 @@
+---
+title: sib.cli
+---
+
+```api
+package: sib.cli
+source: .
+members: true
+inherited: false
+```

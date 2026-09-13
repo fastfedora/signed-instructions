@@ -1,0 +1,10 @@
+---
+title: sib.registry
+---
+
+```api
+package: sib.registry
+source: .
+members: true
+inherited: false
+```

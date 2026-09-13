@@ -1,0 +1,128 @@
+---
+title: Specification
+subtitle: Signed Instruction Blocks, version SIB/1 (draft)
+aliases:
+  - /spec/
+---
+
+A Signed Instruction Block proves who wrote an instruction to an AI agent and when. It does not
+encode permissions, it does not vouch for the signer's intent, and it does not hide the
+instruction. Humans write instructions in plain language; a verifier in the agent's harness labels
+which text carries a valid signature; a permission classifier decides what the labelled text
+allows. This specification covers the block, the verifier and what the verifier hands the
+classifier. It does not cover the classifier's judgment.
+
+
+## Scope
+
+A conforming implementation guarantees three properties of a block whose status is `verified`:
+
+1. **Authorship**: a named signer holding an enrolled key produced the signature.
+2. **Integrity**: the instruction text, after the canonicalization rule the signer chose, is the
+   text the signer signed.
+3. **Validity window**: the block is being used within its issued and expiry times, by the
+   audience it names.
+
+Outside scope: the meaning of the instruction, whether the signer should have signed it, secrecy
+of the instruction, compromise of the verifier host, and how signer identifiers map to people.
+
+
+## Terminology
+
+Block
+: The unit of signed text: an instruction, three clear metadata lines and a detached signature,
+  between marker lines. See [Block Format](format.qmd).
+
+Instruction
+: The plain text between the first two marker lines. The signature covers its canonical form.
+
+Signer
+: The human whose enrolled key produced the signature, identified by a stable string such as an
+  email address, carried in the `iss` header field.
+
+Key identifier
+: The `kid` header field. Names one enrolled key of one signer, so a signer can hold several keys.
+
+Audience
+: The `aud` header field. Names the deployment or harness that may honor the block.
+
+Canonicalization rule
+: The named transformation applied to the instruction before signing and before verification.
+  Carried in the `canon` header field. See [Canonicalization](canonicalization.qmd).
+
+Verifier
+: The deterministic component that extracts blocks, checks them and produces the manifest. It
+  contains no language model.
+
+Manifest
+: The verifier's output: every block found, its status and its origin. See
+  [Provenance Manifest](manifest.qmd).
+
+Harness
+: The runtime that executes an agent's tool calls and in which the verifier runs.
+
+Classifier
+: The component, usually a language model, that decides whether a proposed action is within the
+  instructions the manifest shows to be human-signed. See [Classifier Policy](classifier-policy.qmd).
+
+
+## Conformance Targets
+
+Signer
+: Software that produces blocks. It MUST implement [Block Format](format.qmd) and
+  [Canonicalization](canonicalization.qmd), and it MUST show the signer the canonical instruction
+  and the header terms before the key is used.
+
+Verifier
+: Software that checks blocks. It MUST implement [Canonicalization](canonicalization.qmd),
+  [Verification](verification.qmd) and [Provenance Manifest](manifest.qmd), and it MUST pass every
+  vector in [Conformance](conformance.qmd).
+
+Harness
+: A runtime that integrates a verifier. It MUST run the verifier before its permission decision
+  on every tool call and MUST deliver the manifest as described in
+  [Provenance Manifest](manifest.qmd) and [Classifier Policy](classifier-policy.qmd).
+
+
+## Standards Used
+
+- [RFC 7515](https://www.rfc-editor.org/rfc/rfc7515) (JSON Web Signature) for the signature
+  container and the `alg`, `kid` and `crit` header parameters.
+- [RFC 7797](https://www.rfc-editor.org/rfc/rfc7797) (JWS Unencoded Payload Option) for the
+  detached, unencoded instruction (`b64: false`).
+- [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785) (JSON Canonicalization Scheme) for header
+  serialization.
+- [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339) for timestamps, restricted to UTC with a `Z`
+  suffix.
+- [RFC 8032](https://www.rfc-editor.org/rfc/rfc8032) (EdDSA) for the `EdDSA` algorithm, curve
+  Ed25519.
+- [WebAuthn Level 3](https://www.w3.org/TR/webauthn-3/) for the `ES256-webauthn` algorithm
+  (reserved, Phase 2).
+- [RFC 9580](https://www.rfc-editor.org/rfc/rfc9580) section 7 (OpenPGP cleartext signatures) as
+  prior art for the readable-text-plus-detached-signature layout.
+
+
+## Versioning and Extension
+
+- The `typ` header field carries the specification version. This document defines `SIB/1`.
+- A verifier MUST reject a block whose `typ` it does not implement, with status `malformed`.
+- A verifier MUST ignore header fields it does not know unless the field is listed in `crit`, in
+  which case it MUST reject the block with status `malformed`.
+- A verifier MUST reject an `alg` or a `canon` value it does not implement with status
+  `malformed`. There is no `none` algorithm and no identity rule.
+- A canonicalization rule, once published, MUST NOT change. A change is a new rule with a new
+  version suffix, and both MAY be supported side by side.
+- A new `alg`, `canon` value or header field is added by a new minor revision of this
+  specification. A change to the marker lines, the signing input or the manifest schema is a new
+  `typ`.
+
+
+## Contents
+
+- [Block Format](format.qmd): the envelope, the header fields, the signing input and an example.
+- [Canonicalization](canonicalization.qmd): the rule registry and each rule's exact algorithm.
+- [Verification](verification.qmd): the verification algorithm and its statuses.
+- [Provenance Manifest](manifest.qmd): what the verifier hands the classifier, and how.
+- [Classifier Policy](classifier-policy.qmd): what a conforming classifier integration does with
+  the manifest.
+- [Conformance](conformance.qmd): what each target must pass, and the test vectors.

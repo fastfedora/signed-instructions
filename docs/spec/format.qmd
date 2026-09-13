@@ -1,0 +1,172 @@
+---
+title: Block Format
+---
+
+A block keeps the instruction in plain text and attaches a detached signature after it, in the
+manner of an OpenPGP cleartext signature. Nothing in the block is encoded except the signature
+segment, so the text a reader sees is the text the signature covers.
+
+
+## Envelope
+
+A block is a sequence of lines:
+
+```
+-----BEGIN SIB SIGNED INSTRUCTION-----
+<instruction: one or more lines>
+-----BEGIN SIB SIGNATURE-----
+<clear metadata lines: zero or more "Name: value" lines>
+<one blank line, present when there are metadata lines>
+<signature segment: base64url text, wrapped>
+-----END SIB SIGNATURE-----
+```
+
+Marker lines
+: Each marker is three or more dashes, the marker name, then three or more dashes. A signer MUST
+  emit exactly five ASCII hyphen-minus characters (U+002D) on each side. A verifier MUST accept
+  any run of three or more characters from the set U+002D, U+2010 to U+2015 and U+2212 on either
+  side, since editors and chat clients substitute dashes silently.
+
+Transport prefix
+: A verifier MUST strip from every line of the block the prefix that precedes the dashes on the
+  opening marker line (for instance `> `, `# ` or `// `), when the line starts with that prefix.
+  A line consisting only of that prefix, with or without trailing whitespace, is a blank line.
+
+Instruction segment
+: Every line between the first and second markers, joined with U+000A, with leading and trailing
+  blank lines removed. The signature covers this text after canonicalization, not the bytes as
+  written.
+
+Clear metadata lines
+: Lines of the form `Name: value` at the top of the signature block, ended by the first blank
+  line. A signer MUST emit `Signer`, `Expires` and, when the header has `aud`, `Audience`, with
+  the same values as the header fields `iss`, `exp` and `aud`. They are conveniences for readers.
+  A verifier MUST compare each one it recognizes with the signed header and MUST report
+  `metadata_mismatch` when they differ. Unknown names are ignored.
+
+Signature segment
+: The JWS compact serialization `BASE64URL(header) . . BASE64URL(signature)`: three segments
+  separated by two dots with an empty middle segment, because the payload is detached. A signer
+  MUST wrap it at 64 columns. A verifier MUST discard every character of the segment that is not
+  in the base64url alphabet (`A`–`Z`, `a`–`z`, `0`–`9`, `-`, `_`) or a dot before parsing it,
+  which makes re-wrapping and quoting harmless.
+
+A document MAY contain any number of blocks. A verifier MUST process each independently. A block
+whose closing marker is missing MUST be skipped, never repaired.
+
+
+## Header
+
+The first segment is the base64url encoding of the header serialized with RFC 8785. The header is
+signed. Field names follow JOSE and JWT where a registered name exists.
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `alg` | string | yes | Signature algorithm from the closed list below. |
+| `typ` | string | yes | Specification version. MUST be `SIB/1`. |
+| `kid` | string | yes | Key identifier, looked up in the signer registry. Conventionally `<signer>#<label>`. |
+| `b64` | boolean | yes | MUST be `false`: the instruction is an unencoded, detached payload (RFC 7797). |
+| `crit` | array of string | yes | MUST contain `b64`. Other entries name extensions the verifier must understand. |
+| `canon` | string | yes | Canonicalization rule applied to the instruction, from the [registry](canonicalization.qmd#rule-registry). |
+| `iss` | string | yes | Issuer: the signer's stable identifier. |
+| `iat` | string | yes | Issued at, RFC 3339 UTC with `Z`, whole seconds. |
+| `exp` | string | yes | Expires at, same format. MUST be later than `iat`. |
+| `jti` | string | yes | Unique identifier for this block; the replay nonce. At least 96 bits of randomness, base64url. |
+| `aud` | string | no | Audience: the deployment or harness that may honor the block. Required in enforced mode. |
+| `mode` | string | yes | `dev` for a software key, `enforced` for a hardware-backed key. |
+
+A signer MUST NOT list `canon` in `crit`: a generic JWS library must be able to accept the header,
+and canonicalization is applied by the signer and the verifier before the bytes reach the
+signature primitive.
+
+### Algorithms
+
+| `alg` | Status | Signature primitive |
+|---|---|---|
+| `EdDSA` | normative | Ed25519 (RFC 8032) over the signing input. |
+| `ES256-webauthn` | reserved (Phase 2) | ECDSA P-256 over `authenticatorData ‖ SHA-256(clientDataJSON)`, with the WebAuthn challenge equal to `BASE64URL(SHA-256(signing input))`. Adds the header fields `credentialId`, `authenticatorData` and `clientDataJSON`, all base64url. The verifier MUST require the user-verification flag. |
+
+A verifier MUST reject any other value with status `malformed`.
+
+
+## Signing Input
+
+The signing input is the RFC 7797 form:
+
+```
+ASCII(BASE64URL(UTF8(header JSON))) ‖ "." ‖ UTF8(canonical instruction)
+```
+
+The canonical instruction is the instruction segment after the rule named in `canon`. The
+signature is computed over the signing input with the primitive named in `alg`.
+
+
+## Example
+
+Produced with the reference implementation in dev mode. It verifies against the registry entry
+below with audience `acme/dev-agent` at any time before the `Expires` value.
+
+```
+-----BEGIN SIB SIGNED INSTRUCTION-----
+You may deploy the current main branch to staging with
+scripts/deploy.sh staging whenever the test suite passes.
+-----BEGIN SIB SIGNATURE-----
+Signer: alice@example.com
+Expires: 2026-09-13T22:07:11Z
+Audience: acme/dev-agent
+
+eyJhbGciOiJFZERTQSIsImF1ZCI6ImFjbWUvZGV2LWFnZW50IiwiYjY0IjpmYWxz
+ZSwiY2Fub24iOiJ0ZXh0LzEiLCJjcml0IjpbImI2NCJdLCJleHAiOiIyMDI2LTA5
+LTEzVDIyOjA3OjExWiIsImlhdCI6IjIwMjYtMDktMTNUMTQ6MDc6MTFaIiwiaXNz
+IjoiYWxpY2VAZXhhbXBsZS5jb20iLCJqdGkiOiJFUEM3dk5fSDBWcV80RXVIIiwi
+a2lkIjoiYWxpY2VAZXhhbXBsZS5jb20jZGV2LTIwMjYtMDkiLCJtb2RlIjoiZGV2
+IiwidHlwIjoiU0lCLzEifQ..7AR5HWCArFFXd9L46wA3_70TpECOXflcTkHa_Fac
+dY7eIHc4Sk9X6T7D9gR4rE6j17tdC9isvrMId_gNDnW5Dw
+-----END SIB SIGNATURE-----
+```
+
+The decoded header:
+
+```json
+{
+  "alg": "EdDSA",
+  "typ": "SIB/1",
+  "kid": "alice@example.com#dev-2026-09",
+  "b64": false,
+  "crit": ["b64"],
+  "canon": "text/1",
+  "iss": "alice@example.com",
+  "iat": "2026-09-13T14:07:11Z",
+  "exp": "2026-09-13T22:07:11Z",
+  "jti": "EPC7vN_H0Vq_4EuH",
+  "aud": "acme/dev-agent",
+  "mode": "dev"
+}
+```
+
+The canonical instruction under `text/1`, which is the payload of the signing input:
+
+```
+You may deploy the current main branch to staging with scripts/deploy.sh staging whenever the test suite passes.
+```
+
+The registry entry the verifier uses:
+
+```json
+{
+  "signer": "alice@example.com",
+  "keys": [
+    {
+      "kid": "alice@example.com#dev-2026-09",
+      "alg": "EdDSA",
+      "public_key": "o3T5RIEeC0AJG78bmD4WAOWpNxAXgMDAbQV0vCfAxyQ",
+      "mode": "dev",
+      "enrolled_at": "2026-09-13T14:07:11Z",
+      "attestation_verified": false,
+      "revoked": false
+    }
+  ]
+}
+```
+
+`public_key` is the 32-byte Ed25519 public key, base64url without padding.

@@ -1,0 +1,10 @@
+---
+title: sib.manifest
+---
+
+```api
+package: sib.manifest
+source: .
+members: true
+inherited: false
+```

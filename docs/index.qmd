@@ -1,0 +1,119 @@
+---
+title: Signed Instruction Blocks
+subtitle: Clearsigned human instructions for AI agents, with a deterministic verifier and a
+  provenance manifest for the permission classifier.
+aliases:
+  - /guide/
+---
+
+## Welcome
+
+Welcome to Signed Instruction Blocks (SIB), a format and a reference implementation for proving
+who wrote an instruction to an AI agent, and when.
+
+An agent's permissions today are plain text in a prompt, a file or a chat message, and text can be
+written by anyone, including another agent. A signed instruction block keeps the instruction as
+readable text and attaches a detached signature from a named human. A verifier in the harness checks
+every block in the agent's context on every tool call and emits a provenance manifest that tells the
+permission classifier which text is human-signed and which is not. The signature proves authorship;
+the classifier resolves meaning; the harness makes the classifier unfoolable about who wrote what.
+
+The block does not encode permissions. Humans write ordinary instructions ("you may deploy to
+staging once the tests pass"), and an LLM permission classifier judges whether a proposed action
+falls within what a verified human actually said.
+
+
+## Installation
+
+To get started using the reference implementation:
+
+1. Clone the repository and install the package:
+
+   ```bash
+   git clone https://github.com/fastfedora/signed-instructions
+   cd signed-instructions
+   uv sync
+   ```
+
+2. Choose where keys and the registry live, then create and enroll a dev-mode key:
+
+   ```bash
+   export SIB_HOME=$PWD/.sib-local
+   .venv/bin/sib keygen --kid "alice@example.com#dev-2026-09" --enroll --signer alice@example.com
+   ```
+
+3. Sign an instruction and verify it:
+
+   ```bash
+   printf 'You may deploy the current main branch to staging with\nscripts/deploy.sh staging whenever the test suite passes.\n' \
+     | .venv/bin/sib sign --signer alice@example.com --kid "alice@example.com#dev-2026-09" \
+         --expires 8h --audience acme/dev-agent --file - --out block.txt
+   .venv/bin/sib verify block.txt --audience acme/dev-agent
+   ```
+
+::: {.callout-important}
+Phase 1 runs in dev mode: keys are software files, and every signing and verification prints a
+warning saying so. A dev-mode signature proves possession of a file, not a person. Biometric
+signing with passkeys is Phase 2.
+:::
+
+
+## Getting Started
+
+Once a block verifies on the command line, install the hooks into a project so Claude Code's
+permission decision sees the manifest:
+
+```bash
+.venv/bin/python -m sib.hooks.claude_code.install --project /path/to/repo
+```
+
+The installer writes three hooks into the project's `.claude/settings.json` and prints the
+`autoMode` rule to add to your user settings. The project also needs a gate policy naming the
+audience and the actions that require a signed instruction; see [Claude
+Code](guide/integration/claude-code.qmd) for the file and where to keep it.
+
+From then on, every tool call runs the verifier. A gated action with no verified instruction
+covering it is denied with a reason that names the nearest unsigned claim. A gated action that a
+verified instruction covers proceeds, and the manifest cites the block it relied on.
+
+
+## Learning More
+
+To get familiar with the project, read through the:
+
+- [Definitions](guide/basics/concepts.qmd): Explains the terms used throughout this documentation.
+- [Tutorial](guide/basics/tutorial.qmd): Walks through signing, embedding, verifying and gating.
+- [CLI](guide/basics/cli.qmd): Command-line interface documentation.
+
+To integrate the verifier into an agent harness, check out:
+
+- [Claude Code](guide/integration/claude-code.qmd): The three hooks, the installer, the gate policy
+  and the auto-mode rule.
+- [Permission Classifier](guide/integration/classifier.qmd): The reference classifier, its
+  backends and how to replace it.
+- [Other Harnesses](guide/integration/other-harnesses.qmd): The three steps any harness follows,
+  and the Codex and Agent SDK plans.
+
+For details on specific components, check out:
+
+- [Blocks and Signatures](guide/components/blocks.qmd): The clearsigned block, the header fields
+  and what the signature covers.
+- [Canonicalization](guide/components/canonicalization.qmd): The rules that make a block survive
+  chat clients and email.
+- [Verifier](guide/components/verifier.qmd): The verification order and every status.
+- [Manifest](guide/components/manifest.qmd): The provenance manifest and the note the classifier
+  receives.
+- [Keys and Registry](guide/components/keys.qmd): Dev-mode keys, enrollment and the registry file.
+
+For the reasoning behind the design, read the deep dives:
+
+- [Threat Model](guide/deep-dives/threat-model.qmd): What the design blocks, what it does not, and
+  the gaps found so far.
+- [What the Classifier Sees](guide/deep-dives/what-the-classifier-sees.qmd): How Claude Code's auto
+  mode reads its context, measured.
+- [Design Decisions](guide/deep-dives/design-decisions.qmd): Clearsigning, JOSE names, named
+  canonicalization and the other choices.
+
+Finally, the [Specification](spec/index.qmd) defines the format, canonicalization, verification
+algorithm, manifest schema and conformance vectors for third-party implementations, and the
+[Reference](reference/index.qmd) documents the Python API.

@@ -1,0 +1,10 @@
+---
+title: sib.envelope
+---
+
+```api
+package: sib.envelope
+source: .
+members: true
+inherited: false
+```

@@ -14,6 +14,12 @@ sib = "sib.cli:main"
 
 [dependency-groups]
 dev = ["pytest>=8", "hypothesis>=6"]
+doc = [
+  "griffe>=1.15.0",
+  "markdown>=3.10",
+  "panflute>=2.3.1",
+  "quarto-cli>=1.8.26",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -24,3 +30,7 @@ packages = ["sib"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.quarto]
+project-dir = "docs"
+output-dir = "docs/_site"

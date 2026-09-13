@@ -79,3 +79,17 @@ start a run when the five-hour window is above the cap.
 ```bash
 .venv/bin/python -m pytest -q
 ```
+
+## Documentation
+
+The documentation is a [Quarto](https://quarto.org/) site under `docs/`, with the same layout and
+tooling as [Refactor Arena](https://refactorarena.com/): a user guide, the specification, and an
+API reference generated from docstrings.
+
+```bash
+uv sync --group doc      # installs quarto-cli, griffe and panflute into the venv
+just docs                # generate the API pages and preview at http://localhost:4200
+just docs-build          # render the site into docs/_site
+```
+
+Writing follows `docs/contributing/writing-style.qmd`.

@@ -1,0 +1,172 @@
+---
+title: Keys and Registry
+---
+
+A signature is only as meaningful as the binding between a key and a person. In Phase 1 that
+binding is a software key and a flat file: enough to exercise every other part of the design, and
+clearly labelled as not proving who signed. This page covers where keys live, what the registry
+records and what changes when biometric signing arrives.
+
+
+## Dev-Mode Keys
+
+`sib keygen` creates an Ed25519 private key with the `cryptography` library and stores it under
+`SIB_HOME` (`~/.sib` unless the variable is set):
+
+```text
+$SIB_HOME/dev-keys/alice@example.com#dev-2026-09.pem
+```
+
+The file is PKCS#8 PEM without a passphrase, written with mode `0600`. Characters outside
+`A-Za-z0-9._@#-` in the key id are replaced with `_` in the file name. Every command that creates
+or uses a dev key prints the same line to standard error:
+
+```text
+SIB DEV MODE: software key in use; this signature proves possession of a file, not a person.
+```
+
+::: {.callout-important}
+A dev key proves that whoever signed could read a file. It does not prove a person was present.
+Dev mode exists so the rest of the system can be built and tested; enforced mode refuses dev keys
+outright.
+:::
+
+
+## Key Identifiers
+
+A key id (`kid`) names one enrolled key and appears in every block signed with it. The convention
+is the signer id, a `#`, and a label:
+
+```text
+alice@example.com#dev-2026-09
+alice@example.com#passkey-7c1e
+```
+
+The label distinguishes a person's keys from each other, so a dev key and a passkey can coexist and
+either can be rotated. The verifier does not parse the label; it looks the whole `kid` up in the
+registry and checks that the registry's signer matches the header's `iss`.
+
+
+## Enrollment
+
+Enrollment records a public key under a signer id. The usual path creates and enrolls in one step:
+
+```bash
+# Create a dev key and enroll it for alice
+sib keygen --kid "alice@example.com#dev-2026-09" --enroll --signer alice@example.com
+```
+
+```text
+SIB DEV MODE: software key in use; this signature proves possession of a file, not a person.
+dev key created for kid alice@example.com#dev-2026-09
+public key: JmbApRbWb-3nVyk_H9vMHMId6bSA_znZfS2_aRnu5Hc
+enrolled alice@example.com#dev-2026-09 for alice@example.com in /tmp/sib-doc-blocks/registry.json (dev mode, attestation_verified=false)
+```
+
+To enroll a public key produced elsewhere, use `sib enroll`:
+
+`--signer ID`
+: The signer's stable identifier (e.g., an email address).
+
+`--kid KID`
+: The key id, following the convention above.
+
+`--public-key KEY`
+: The raw public key, base64url without padding.
+
+`--alg ALG`
+: The signature algorithm (default: `EdDSA`).
+
+`--dev`
+: Mark the key as a dev key. Without it the key is enrolled in enforced mode, which in Phase 1 no
+  signing path can use.
+
+Enrolling a `kid` that already exists is an error; a key is never silently replaced.
+
+
+## The Registry File
+
+The registry is one JSON file at `$SIB_HOME/registry.json`:
+
+```json
+{
+  "signers": [
+    {
+      "signer": "alice@example.com",
+      "keys": [
+        {
+          "kid": "alice@example.com#dev-2026-09",
+          "alg": "EdDSA",
+          "public_key": "JmbApRbWb-3nVyk_H9vMHMId6bSA_znZfS2_aRnu5Hc",
+          "mode": "dev",
+          "enrolled_at": "2026-09-13T14:06:30Z",
+          "attestation_verified": false,
+          "attestation": {},
+          "revoked": false
+        }
+      ]
+    }
+  ]
+}
+```
+
+Each key carries:
+
+`alg`, `public_key`
+: What the verifier needs to check a signature. The verifier also requires the header's `alg` to
+  match this entry.
+
+`mode`
+: `dev` or `enforced`. A key enrolled in dev mode fails with `dev_key_in_enforced_mode` when the
+  verifier runs in enforced mode, whatever the block's own header says.
+
+`enrolled_at`
+: When the entry was made, RFC 3339 in UTC.
+
+`attestation_verified`, `attestation`
+: Whether the enrollment carried attestation that the verifier checked, and what it said. Always
+  false and empty for dev keys. This is the field that will separate "hardware backing verified"
+  from "hardware backing assumed" once biometric keys exist.
+
+`revoked`
+: Honored by the verifier (status `revoked`), but no command sets it yet.
+
+The registry is the stand-in for the external directory that maps signer keys to people, which the
+project treats as out of scope. It is a flat file so that it stays easy to inspect and to ship with
+a demo; it is not access-controlled beyond file permissions.
+
+
+## Dev Mode and Enforced Mode
+
+The verifier's mode comes from the harness (`SIB_MODE`, default `dev` in Phase 1) and is recorded
+in every manifest. The two modes differ in three places:
+
+- **Dev keys**: accepted in dev mode, refused in enforced mode.
+- **Audience**: a block with no `aud` is accepted in dev mode and is `audience_mismatch` in
+  enforced mode.
+- **Warnings**: dev mode prints its warning on every operation. Enforced mode is silent.
+
+Nothing else changes, so a session can be developed in dev mode and switched to enforced mode once
+a real key is enrolled.
+
+
+## What Phase 2 Changes
+
+Phase 2 replaces the dev key with a WebAuthn passkey (Touch ID on macOS first), as planned in
+`plans/phase-2-biometric-signing.md`. The plan is stated here so the registry format is read with
+it in mind:
+
+- Enrollment happens through a local web page that calls `navigator.credentials.create` with user
+  verification required. The registry entry gets `alg: ES256-webauthn`, the credential's public
+  key, the authenticator's AAGUID and whatever attestation the authenticator returned.
+- `attestation_verified` becomes true only when the attestation format could be checked against a
+  vendor root. Apple platform passkeys often return no attestation, in which case the AAGUID is
+  self-reported and the field stays false.
+- Signing places the SHA-256 of the signing input in the WebAuthn challenge. The verifier
+  recomputes it, checks the origin and RP ID, requires the user-verification flag and verifies the
+  ES256 signature with the enrolled key.
+- The user-verification flag covers PIN and password as well as biometrics, so "biometric" is
+  enforced by an allowlist of biometric-capable authenticators rather than proven by the
+  signature. That limit is documented rather than hidden.
+
+Until then, every block is a dev block, and every registry entry says so.

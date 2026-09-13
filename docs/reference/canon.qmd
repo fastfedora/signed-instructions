@@ -1,0 +1,10 @@
+---
+title: sib.canon
+---
+
+```api
+package: sib.canon
+source: .
+members: true
+inherited: false
+```

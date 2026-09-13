@@ -1,0 +1,17 @@
+{
+  "raw_1": "canon.qmd#raw_1",
+  "text_1": "canon.qmd#text_1",
+  "parse_time": "header.qmd#parse_time",
+  "signing_input": "header.qmd#signing_input",
+  "extract": "envelope.qmd#extract",
+  "generate": "keys_dev.qmd#generate",
+  "verify_block": "verify.qmd#verify_block",
+  "render_classifier_note": "manifest.qmd#render_classifier_note",
+  "classify": "classifier.qmd#classify",
+  "assemble_manifest": "hooks.qmd#assemble_manifest",
+  "is_gated": "hooks.qmd#is_gated",
+  "load_policy": "hooks.qmd#load_policy",
+  "recent_activity": "hooks.qmd#recent_activity",
+  "run_hook": "hooks.qmd#run_hook",
+  "transcript_blocks": "hooks.qmd#transcript_blocks"
+}

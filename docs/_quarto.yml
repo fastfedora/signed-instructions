@@ -1,0 +1,118 @@
+project:
+  type: website
+  pre-render:
+    - reference/filter/sidebar.py
+  post-render:
+    - scripts/post-render.sh
+
+metadata-files:
+  - reference/_sidebar.yml
+
+filters:
+  - at: pre-quarto
+    path: reference/filter/interlink.lua
+  # Expand ```api fenced blocks (panflute JSON filter).
+  - at: post-ast
+    type: json
+    path: reference/filter/filter.py
+
+website:
+  title: "Signed Instruction Blocks"
+  description: "Clearsigned human instructions for AI agents, with a verifier and provenance manifest"
+  bread-crumbs: true
+  page-navigation: true
+  search: true
+  repo-url: https://github.com/fastfedora/signed-instructions
+  repo-actions: [issue]
+
+  navbar:
+    left:
+      - text: User Guide
+        file: index.qmd
+      - text: Specification
+        file: spec/index.qmd
+      - text: Reference
+        file: reference/index.qmd
+    right:
+      - icon: github
+        href: https://github.com/fastfedora/signed-instructions
+
+  sidebar:
+     - title: Guide
+       style: docked
+       contents:
+        - section: "Getting Started"
+          contents:
+            - text: Welcome
+              file: index.qmd
+            - text: Definitions
+              file: guide/basics/concepts.qmd
+            - text: Tutorial
+              file: guide/basics/tutorial.qmd
+            - text: CLI
+              file: guide/basics/cli.qmd
+        - section: "Integration"
+          contents:
+            - text: Claude Code
+              file: guide/integration/claude-code.qmd
+            - text: Permission Classifier
+              file: guide/integration/classifier.qmd
+            - text: Other Harnesses
+              file: guide/integration/other-harnesses.qmd
+        - section: "Components"
+          contents:
+            - text: Blocks and Signatures
+              file: guide/components/blocks.qmd
+            - text: Canonicalization
+              file: guide/components/canonicalization.qmd
+            - text: Verifier
+              file: guide/components/verifier.qmd
+            - text: Manifest
+              file: guide/components/manifest.qmd
+            - text: Keys and Registry
+              file: guide/components/keys.qmd
+        - section: "Deep Dives"
+          contents:
+            - text: Threat Model
+              file: guide/deep-dives/threat-model.qmd
+            - text: What the Classifier Sees
+              file: guide/deep-dives/what-the-classifier-sees.qmd
+            - text: Design Decisions
+              file: guide/deep-dives/design-decisions.qmd
+        - section: "Contributing"
+          contents:
+            - text: Writing Style
+              file: contributing/writing-style.qmd
+     - title: Specification
+       style: docked
+       contents:
+        - text: Overview
+          file: spec/index.qmd
+        - text: Block Format
+          file: spec/format.qmd
+        - text: Canonicalization
+          file: spec/canonicalization.qmd
+        - text: Verification
+          file: spec/verification.qmd
+        - text: Provenance Manifest
+          file: spec/manifest.qmd
+        - text: Classifier Policy
+          file: spec/classifier-policy.qmd
+        - text: Conformance
+          file: spec/conformance.qmd
+
+format:
+  html:
+    theme: [theme-font.scss, cosmo, theme.scss]
+    toc: true
+    smooth-scroll: true
+    code-copy: true
+    link-external-newwindow: true
+
+# Make reference pages a sidebar collection
+collections:
+  reference:
+    categories: false
+
+execute:
+  freeze: auto

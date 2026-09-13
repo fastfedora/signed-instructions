@@ -1,0 +1,22 @@
+---
+title: Reference
+---
+
+The Python API, one page per module. The [CLI](../guide/basics/cli.qmd) is documented in the guide.
+
+## Python API
+
+| Module | Description |
+| ------ | ----------- |
+| [sib.canon](canon.qmd) | Canonicalization rules (`text/1`, `raw/1`) and the rule registry |
+| [sib.header](header.qmd) | The signed header, its serialization, and the RFC 7797 signing input |
+| [sib.envelope](envelope.qmd) | Rendering and extracting clearsigned blocks |
+| [sib.keys_dev](keys_dev.qmd) | Dev-mode Ed25519 keys (sign, verify, key storage) |
+| [sib.registry](registry.qmd) | Flat-file signer registry |
+| [sib.verify](verify.qmd) | The deterministic verifier and its statuses |
+| [sib.manifest](manifest.qmd) | Provenance manifest and the classifier note |
+| [sib.nonce_store](nonce_store.qmd) | Replay control (no-op in Phase 1) |
+| [sib.classifier](classifier.qmd) | Reference permission classifier and its backends |
+| [sib.hooks](hooks.qmd) | Claude Code hooks (UserPromptSubmit, PreToolUse, PostToolUse) and installer |
+| [sib.cli](cli.qmd) | The `sib` command-line interface |
+| [sib.b64](b64.qmd) | base64url helpers |

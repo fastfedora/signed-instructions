@@ -1,0 +1,10 @@
+---
+title: sib.header
+---
+
+```api
+package: sib.header
+source: .
+members: true
+inherited: false
+```

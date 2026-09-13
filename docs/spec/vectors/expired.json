@@ -1,0 +1,31 @@
+{
+  "name": "expired",
+  "note": "",
+  "block": "-----BEGIN SIB SIGNED INSTRUCTION-----\nYou may deploy the current main branch to staging with\nscripts/deploy.sh staging whenever the test suite passes.\n-----BEGIN SIB SIGNATURE-----\nSigner: alice@example.com\nExpires: 2026-09-13T11:00:00Z\nAudience: acme/dev-agent\n\neyJhbGciOiJFZERTQSIsImF1ZCI6ImFjbWUvZGV2LWFnZW50IiwiYjY0IjpmYWxz\nZSwiY2Fub24iOiJ0ZXh0LzEiLCJjcml0IjpbImI2NCJdLCJleHAiOiIyMDI2LTA5\nLTEzVDExOjAwOjAwWiIsImlhdCI6IjIwMjYtMDktMTNUMDM6MDA6MDBaIiwiaXNz\nIjoiYWxpY2VAZXhhbXBsZS5jb20iLCJqdGkiOiI2cHR4UnIyOVdEaVpHS3IxIiwi\na2lkIjoiYWxpY2VAZXhhbXBsZS5jb20jZGV2LTIwMjYtMDkiLCJtb2RlIjoiZGV2\nIiwidHlwIjoiU0lCLzEifQ..KDjJZmU6dV2wCJJs7KErqcKomFXL5l4wg20_6yHF\nVmc2SHWJ3EBHomqX6IW56sK2iHWMqlUXCR2JZi0Waz7rCw\n-----END SIB SIGNATURE-----",
+  "registry": {
+    "signers": [
+      {
+        "signer": "alice@example.com",
+        "keys": [
+          {
+            "kid": "alice@example.com#dev-2026-09",
+            "alg": "EdDSA",
+            "public_key": "kLuSRUl_7PCVjqPo6bOJZ4RJPmDnRS4xWNyVrm7vIYc",
+            "mode": "dev",
+            "enrolled_at": "2026-09-13T14:07:43Z",
+            "attestation_verified": false,
+            "attestation": {},
+            "revoked": false
+          }
+        ]
+      }
+    ]
+  },
+  "inputs": {
+    "now": "2026-09-13T12:00:00Z",
+    "audience": "acme/dev-agent",
+    "mode": "dev"
+  },
+  "expected_status": "expired",
+  "expected_text": "You may deploy the current main branch to staging with scripts/deploy.sh staging whenever the test suite passes."
+}

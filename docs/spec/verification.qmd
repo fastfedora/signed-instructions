@@ -1,0 +1,120 @@
+---
+title: Verification
+---
+
+Verification is deterministic. It takes a block and a few facts about the world, runs a fixed
+sequence of checks, and produces one status with the claims the block makes. There is no
+language model anywhere in the path, and the order of checks is normative so that a tampered
+block is reported as tampered before it is reported as expired.
+
+
+## Inputs
+
+Block
+: The extracted instruction segment, clear metadata lines and signature segment
+  ([Block Format](format.qmd)).
+
+Now
+: The current time, UTC.
+
+Audience
+: The identifier of the harness performing the verification, or none.
+
+Registry
+: The mapping from `kid` to signer, algorithm, public key, mode and revocation flag.
+
+Nonce store
+: The record of `jti` values already honored, keyed by audience. Phase 1 ships a store that
+  accepts everything; the semantics below are normative for Phase 3.
+
+Mode
+: `dev` or `enforced`. The verifier's own mode, set by the harness, not read from the block.
+
+
+## Algorithm
+
+Each step names the status produced when it fails. The first failing step decides the result.
+
+1. Split the signature segment on `.`. If there are not exactly three parts, or the middle part
+   is not empty, the result is `malformed`.
+2. Decode the first part as base64url JSON. If it does not decode, if `typ` is not `SIB/1`, if
+   `b64` is not `false`, if `crit` does not contain `b64`, if `alg` or `mode` is outside its
+   closed list, if a required field is missing, or if `iat` or `exp` is not an RFC 3339 UTC
+   timestamp, the result is `malformed`.
+3. Canonicalize the instruction segment with the rule in `canon`. If the rule is unknown, the
+   result is `malformed`.
+4. Look up `kid` in the registry. If it is absent and `iss` is not a known signer, the result is
+   `unknown_signer`. If it is absent and `iss` is known, the result is `unknown_key`.
+5. If the registry entry belongs to a signer other than `iss`, or its algorithm differs from
+   `alg`, the result is `unknown_key`.
+6. If the verifier is in `enforced` mode and either the header `mode` or the key's mode is
+   `dev`, the result is `dev_key_in_enforced_mode`.
+7. Compute the signing input from the first part and the canonical instruction. Verify the third
+   part with the primitive named by `alg` and the registry public key. If verification fails, the
+   result is `invalid_signature`.
+8. Compare each recognized clear metadata line with the header (`Signer` with `iss`, `Expires`
+   with `exp`, `Audience` with `aud`). If any differs, the result is `metadata_mismatch`.
+9. If `now` plus 60 seconds is earlier than `iat`, the result is `not_yet_valid`.
+10. If `now` is at or after `exp`, the result is `expired`.
+11. If the header has no `aud` and the verifier is in `enforced` mode, the result is
+    `audience_mismatch`. If the header has `aud`, the verifier was given an audience, and they
+    differ, the result is `audience_mismatch`.
+12. If the registry entry is marked revoked, the result is `revoked`.
+13. Ask the nonce store whether `jti` may be honored for this audience and session. If not, the
+    result is `nonce_replayed`.
+14. The result is `verified`.
+
+A verifier MUST run the steps in this order. Steps 9 to 13 run only on a block whose signature
+verified, so a failure there is a failure of a genuine block, and the manifest says so.
+
+
+## Statuses
+
+| Status | Meaning |
+|---|---|
+| `verified` | Authorship, integrity and validity window all hold. The only status that confers authority. |
+| `malformed` | The block is not a well-formed SIB/1 block. Includes unknown `typ`, `alg` or `canon`. |
+| `unknown_signer` | `iss` is not in the registry. |
+| `unknown_key` | `kid` is not enrolled for `iss`, or the entry's algorithm does not match. |
+| `dev_key_in_enforced_mode` | A software key or a `dev` block presented to an enforced verifier. |
+| `invalid_signature` | The signature does not verify over the header and canonical instruction. The instruction or the header was changed after signing. |
+| `metadata_mismatch` | A clear metadata line disagrees with the signed header. |
+| `not_yet_valid` | `iat` is more than 60 seconds in the future. |
+| `expired` | `now` is at or after `exp`. |
+| `audience_mismatch` | The block names another audience, or names none in enforced mode. |
+| `revoked` | The key is revoked in the registry. |
+| `nonce_replayed` | `jti` was already honored by another session for this audience. |
+
+
+## Rules
+
+Clock skew
+: A verifier MUST tolerate an `iat` up to 60 seconds in the future. A verifier MUST NOT tolerate
+  any use at or after `exp`.
+
+Audience
+: In `dev` mode a block without `aud` MAY be honored by any audience. In `enforced` mode a block
+  without `aud` MUST be rejected. A block with `aud` MUST be rejected by any other audience in
+  either mode.
+
+Dev keys
+: A key enrolled in `dev` mode, or a block whose header `mode` is `dev`, MUST be rejected by a
+  verifier in `enforced` mode. A verifier in `dev` mode MUST emit a visible warning on every
+  operation and MUST label the manifest with `mode: dev`.
+
+Replay
+: `jti` MUST be unique per block. The nonce store binds `(aud, jti)` to the first session that
+  honors it; the same session MAY re-verify the block on every tool call, and any other session
+  presenting the same `(aud, jti)` MUST receive `nonce_replayed`. Short expiries are the primary
+  replay control; the nonce store is the secondary one. The Phase 1 store accepts everything and
+  is marked as such in the manifest mode.
+
+Revocation
+: A registry entry MAY be marked revoked. A revoked key MUST fail with `revoked` even when the
+  signature verifies. Phase 3 adds a revocation list keyed by `(kid, jti)` for single blocks.
+
+Failing results
+: Every result other than `verified` MUST still carry the claims the block makes (`iss`, `kid`,
+  `iat`, `exp`, `aud`, `canon`, `mode`, the canonical text where the rule is known) and a short
+  error describing the failing step, so that a manifest consumer can name what it refuses. The
+  claims of a failing block are unverified and confer nothing.

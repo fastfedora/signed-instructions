@@ -1,0 +1,131 @@
+---
+title: Command Line Interface (CLI)
+---
+
+The `sib` command creates keys, enrolls them, signs instructions, verifies files and decodes
+blocks. It runs in dev mode in Phase 1: every command that signs or verifies prints the dev-mode
+warning to standard error.
+
+All commands read `SIB_HOME` for the directory that holds keys and the registry (default:
+`~/.sib`).
+
+
+## Basic Usage
+
+```bash
+# Create a dev key and enroll it for a signer
+sib keygen --kid "alice@example.com#dev-2026-09" --enroll --signer alice@example.com
+
+# Sign an instruction from a file, writing the block to stdout
+sib sign --signer alice@example.com --kid "alice@example.com#dev-2026-09" --expires 2h \
+  --audience acme/dev-agent --file instruction.txt
+
+# Verify every block in a file for a given audience
+sib verify CLAUDE.md --audience acme/dev-agent
+
+# Decode blocks without verifying them
+sib inspect CLAUDE.md
+```
+
+
+## Commands
+
+### keygen
+
+Create a dev-mode Ed25519 key under `$SIB_HOME/dev-keys/` and optionally enroll it.
+
+`--kid ID`
+: Key identifier, by convention `signer#label` (e.g., `alice@example.com#dev-2026-09`). Required.
+
+`--enroll`
+: Also add the public key to the registry. Requires `--signer`.
+
+`--signer ID`
+: The signer to enroll the key for.
+
+`--dev`
+: Accepted for clarity; dev mode is the only mode `keygen` supports.
+
+### enroll
+
+Add an existing public key to the registry, for keys created elsewhere.
+
+`--signer ID`
+: The signer the key belongs to. Required.
+
+`--kid ID`
+: Key identifier. Required.
+
+`--public-key B64URL`
+: The raw public key, base64url encoded. Required.
+
+`--alg ALG`
+: Signature algorithm (default: `EdDSA`).
+
+`--dev`
+: Mark the key as a dev-mode key. Without it the key is enrolled as `enforced`.
+
+### sign
+
+Clearsign an instruction. The command prints the canonical text and the terms before signing, so
+what you see is what you sign.
+
+`--signer ID`
+: The signer, written to the `iss` header field. Required.
+
+`--kid ID`
+: The key to sign with; must be enrolled for the signer. Required.
+
+`--expires DURATION`
+: Validity window from now, as `30m`, `2h` or `1d` (default: `2h`).
+
+`--audience ID`
+: The deployment or harness the block is for. Optional in dev mode; a block with no audience is
+  refused in enforced mode.
+
+`--canon RULE`
+: Canonicalization rule (default: `text/1`). See [Canonicalization](../components/canonicalization.qmd).
+
+`--file PATH`
+: File holding the instruction, or `-` for standard input (default: standard input).
+
+`--out PATH`
+: Write the block to a file instead of standard output.
+
+### verify
+
+Extract and verify every block in a file. Exits with status 0 only when at least one block was
+found and every block verified.
+
+`FILE`
+: The file to check, or `-` for standard input.
+
+`--audience ID`
+: The audience of this harness; blocks for another audience fail with `audience_mismatch`.
+
+`--enforced`
+: Verify in enforced mode: dev-mode blocks and keys confer nothing.
+
+`--json`
+: Print the provenance manifest as JSON instead of the human-readable summary.
+
+### inspect
+
+Decode every block in a file without verifying: the text as written, the clear metadata lines,
+the decoded header and the first characters of the signature.
+
+`FILE`
+: The file to decode, or `-` for standard input.
+
+
+## Exit Codes
+
+`sib verify` returns 0 when every block verified, 1 otherwise, including when no block was
+found. The other commands return 0 on success and exit with a message on a usage error, such as
+signing with a key that is not enrolled for the signer.
+
+
+## Environment
+
+`SIB_HOME`
+: Directory for dev keys and `registry.json` (default: `~/.sib`).

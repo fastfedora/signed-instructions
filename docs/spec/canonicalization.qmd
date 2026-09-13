@@ -1,0 +1,98 @@
+---
+title: Canonicalization
+---
+
+The signature covers the instruction after a named transformation, so the same instruction
+verifies whether it arrived through a file, a chat client or an email. The rule is named in the
+signed `canon` header field. A verifier applies exactly that rule and never guesses, which is what
+stops an attacker from relabelling a block to a rule under which an altered text collapses onto
+the signed form.
+
+
+## Rule Registry
+
+| Rule | Status | Use |
+|---|---|---|
+| `text/1` | normative | Prose instructions carried through chat, email and Markdown. |
+| `raw/1` | normative | Text whose line structure matters. No transport tolerance. |
+| `json/1` | reserved (Phase 3) | RFC 8785 over the parsed JSON value. Structured authorizations. |
+
+A rule MUST NOT change once published. A revised rule is a new entry with the next version
+suffix (`text/2`). A verifier MAY implement several versions side by side.
+
+
+## text/1
+
+Input: the instruction segment as a Unicode string. Output: a Unicode string.
+
+1. Apply Unicode Normalization Form C.
+2. Replace or remove each character in the fold table below.
+3. Split the string on runs of Unicode whitespace, as defined by the `White_Space` property, and
+   join the parts with a single U+0020. This collapses every run of spaces, tabs and line breaks
+   to one space and removes leading and trailing whitespace.
+
+Fold table:
+
+| Code point | Character | Replacement |
+|---|---|---|
+| U+2018 | left single quotation mark | U+0027 apostrophe |
+| U+2019 | right single quotation mark | U+0027 |
+| U+201A | single low-9 quotation mark | U+0027 |
+| U+201B | single high-reversed-9 quotation mark | U+0027 |
+| U+201C | left double quotation mark | U+0022 quotation mark |
+| U+201D | right double quotation mark | U+0022 |
+| U+201E | double low-9 quotation mark | U+0022 |
+| U+201F | double high-reversed-9 quotation mark | U+0022 |
+| U+00A0 | no-break space | U+0020 space |
+| U+2007 | figure space | U+0020 |
+| U+202F | narrow no-break space | U+0020 |
+| U+200B | zero width space | removed |
+| U+200C | zero width non-joiner | removed |
+| U+200D | zero width joiner | removed |
+| U+FEFF | zero width no-break space | removed |
+
+`text/1` does not sign line structure. Two instructions that differ only in line breaks, spacing
+or typographic quotes have the same canonical form. Two instructions that differ in any other
+character do not.
+
+
+## raw/1
+
+1. Apply Unicode Normalization Form C.
+
+Nothing else. Line endings, indentation and quotes are signed as written. A block under `raw/1`
+does not survive re-wrapping by a mail client.
+
+
+## json/1 (Reserved)
+
+Reserved for Phase 3. Definition: parse the instruction segment as JSON; if it does not parse,
+the block is `malformed`; otherwise serialize the value with RFC 8785. Whitespace inside strings
+is preserved, key order and number formatting are not signed.
+
+
+## Requirements
+
+Signers
+
+- A signer MUST apply the rule named in `canon` to the instruction before computing the signing
+  input.
+- A signer MUST show the signer the canonical form of the instruction, together with `iss`,
+  `exp`, `aud` and `canon`, before the signing key is used. The text the human approves is the
+  canonical text, not the text as typed.
+- A signer SHOULD default to `text/1` for prose.
+
+Verifiers
+
+- A verifier MUST apply only the rule named in `canon`.
+- A verifier MUST NOT retry verification under another rule when the first fails.
+- A verifier MUST report `malformed` for a rule it does not implement.
+- A verifier MUST report the canonical text in the manifest, since that is what was signed.
+
+Adding a rule
+
+- A proposal for a new rule MUST include a collision analysis: which distinct inputs map to the
+  same canonical form, and an argument that no such pair differs in meaning for the kind of
+  content the rule is for.
+- A proposal MUST include test vectors for the rule, including inputs that differ only by the
+  transformations the rule is meant to absorb.

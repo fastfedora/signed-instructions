@@ -1,0 +1,10 @@
+---
+title: sib.verify
+---
+
+```api
+package: sib.verify
+source: .
+members: true
+inherited: false
+```

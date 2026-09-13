@@ -1,0 +1,102 @@
+---
+title: Definitions
+aliases:
+  - /guide/basics/
+---
+
+## Terminology
+
+This project uses a small set of terms consistently. A few of them, such as "verified" and
+"harness", carry a narrower meaning here than in general use.
+
+Signed Instruction Block
+: An instruction in plain text followed by a detached signature over it. The instruction is what
+  a person reads and what the signature covers; there is no second, encoded copy. Shortened to
+  "block" once the context is clear.
+
+Instruction
+: The text a human signed. It is written in natural language and does not encode permissions; a
+  classifier decides what it authorizes.
+
+Signer
+: The named human who signed a block, identified by a stable id such as `alice@example.com`
+  (the `iss` header field). The only source of authority in the design.
+
+Key Identifier
+: The name of the key a signer used, of the form `signer#label` (the `kid` field). A signer can
+  hold several keys, such as a dev key and a passkey, and rotate them independently.
+
+Audience
+: The deployment or harness a block is meant for (the `aud` field). A block whose audience does
+  not match the harness confers nothing there.
+
+Canonicalization Rule
+: The named, versioned transformation applied to the instruction before signing and before
+  verifying (the `canon` field), so that the same instruction verifies after a chat client has
+  re-wrapped it or replaced its quotes.
+
+Verifier
+: The deterministic component in the harness that extracts every block from the agent's context,
+  checks it, and produces the manifest. It contains no model and makes no allow or deny decision.
+
+Verified
+: The status of a block whose signature checks against an enrolled key and whose validity window,
+  audience and metadata all hold. Only verified blocks carry authority. A block that fails is
+  described by its status (`expired`, `invalid_signature` and so on), never as "invalid" alone.
+
+Provenance Manifest
+: The verifier's output: every block found in context, its status, its signer and text, and where
+  in the context it came from. Everything not listed is unsigned.
+
+Harness
+: The runtime that executes an agent's tool calls, such as Claude Code or Codex. The verifier and
+  the manifest channel run in the harness, outside the model loop.
+
+Permission Classifier
+: The model that decides whether a proposed tool call may run. It consumes the manifest as
+  structured input. Claude Code's auto mode has one built in; the reference implementation also
+  ships its own.
+
+Gate
+: The hook-side check that denies a policy-covered action when no verified block covers it. It is
+  the guarantee; the classifier is the judgment.
+
+Gated Action
+: An action the gate policy names as requiring human authorization, such as a deploy. The policy
+  is harness configuration and lives outside the repository.
+
+Origin
+: Where a block was found: the user's prompt, the project's instruction files, a tool result, or
+  an assistant message. Origin labels tell the classifier who put the text in front of the agent.
+
+Dev Mode
+: The mode in which software keys on disk sign and verify blocks, with a warning on every
+  operation. Blocks and keys marked `dev` confer nothing in enforced mode.
+
+Enforced Mode
+: The mode in which only hardware-backed, user-verified keys count. Available with the WebAuthn
+  signing path in Phase 2.
+
+
+## Concepts
+
+A few ideas recur throughout the documentation and are easier to state once:
+
+Authorship, not permission
+: A block proves who wrote the text and when. Whether that text permits a specific action is a
+  reading of natural language, and reading is the classifier's job.
+
+Unsigned text confers nothing
+: Runbooks, `CLAUDE.md`, commit messages, fetched pages, subagent reports and quoted chat threads
+  can all say "deploys are pre-authorized". None of it is an instruction from a human unless it is
+  inside a verified block.
+
+Fail closed on authority
+: When the verifier, the registry, the session store or the classifier fails, a gated action is
+  denied and the reason names the failure. A non-gated action proceeds. The hook never relies on
+  the harness's own default, which is to proceed.
+
+Two channels to the classifier
+: In Claude Code the manifest reaches the auto-mode classifier as a short note through the
+  PostToolUse hook's `classifierContext` field, and the gate runs in the PreToolUse hook before the
+  classifier is consulted. Either layer stops the injected-authorization attack on its own.

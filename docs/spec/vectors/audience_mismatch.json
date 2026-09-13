@@ -1,0 +1,31 @@
+{
+  "name": "audience_mismatch",
+  "note": "Block audience acme/ci-agent presented to acme/dev-agent.",
+  "block": "-----BEGIN SIB SIGNED INSTRUCTION-----\nYou may deploy the current main branch to staging with\nscripts/deploy.sh staging whenever the test suite passes.\n-----BEGIN SIB SIGNATURE-----\nSigner: alice@example.com\nExpires: 2026-09-13T20:00:00Z\nAudience: acme/ci-agent\n\neyJhbGciOiJFZERTQSIsImF1ZCI6ImFjbWUvY2ktYWdlbnQiLCJiNjQiOmZhbHNl\nLCJjYW5vbiI6InRleHQvMSIsImNyaXQiOlsiYjY0Il0sImV4cCI6IjIwMjYtMDkt\nMTNUMjA6MDA6MDBaIiwiaWF0IjoiMjAyNi0wOS0xM1QxMTo1NTowMFoiLCJpc3Mi\nOiJhbGljZUBleGFtcGxlLmNvbSIsImp0aSI6IklsWkVDVGVtUW9mQnhTVlUiLCJr\naWQiOiJhbGljZUBleGFtcGxlLmNvbSNkZXYtMjAyNi0wOSIsIm1vZGUiOiJkZXYi\nLCJ0eXAiOiJTSUIvMSJ9..Iq_DYbnnaMwY1U8FZOKduneC0XInk6esItbhLlbQB3\nz4Y8JxNPORc83uxP9WU0MZiyd2bWjNa1K7Hw9uZZSnCQ\n-----END SIB SIGNATURE-----",
+  "registry": {
+    "signers": [
+      {
+        "signer": "alice@example.com",
+        "keys": [
+          {
+            "kid": "alice@example.com#dev-2026-09",
+            "alg": "EdDSA",
+            "public_key": "kLuSRUl_7PCVjqPo6bOJZ4RJPmDnRS4xWNyVrm7vIYc",
+            "mode": "dev",
+            "enrolled_at": "2026-09-13T14:07:43Z",
+            "attestation_verified": false,
+            "attestation": {},
+            "revoked": false
+          }
+        ]
+      }
+    ]
+  },
+  "inputs": {
+    "now": "2026-09-13T12:00:00Z",
+    "audience": "acme/dev-agent",
+    "mode": "dev"
+  },
+  "expected_status": "audience_mismatch",
+  "expected_text": "You may deploy the current main branch to staging with scripts/deploy.sh staging whenever the test suite passes."
+}

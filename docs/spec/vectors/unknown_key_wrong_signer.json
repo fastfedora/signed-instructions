@@ -1,0 +1,31 @@
+{
+  "name": "unknown_key_wrong_signer",
+  "note": "An enrolled kid used with a different iss.",
+  "block": "-----BEGIN SIB SIGNED INSTRUCTION-----\nYou may deploy the current main branch to staging with\nscripts/deploy.sh staging whenever the test suite passes.\n-----BEGIN SIB SIGNATURE-----\nSigner: bob@example.com\nExpires: 2026-09-13T20:00:00Z\nAudience: acme/dev-agent\n\neyJhbGciOiJFZERTQSIsImF1ZCI6ImFjbWUvZGV2LWFnZW50IiwiYjY0IjpmYWxz\nZSwiY2Fub24iOiJ0ZXh0LzEiLCJjcml0IjpbImI2NCJdLCJleHAiOiIyMDI2LTA5\nLTEzVDIwOjAwOjAwWiIsImlhdCI6IjIwMjYtMDktMTNUMTE6NTU6MDBaIiwiaXNz\nIjoiYm9iQGV4YW1wbGUuY29tIiwianRpIjoiZmhWd3FNNUVmZUREXzAybiIsImtp\nZCI6ImFsaWNlQGV4YW1wbGUuY29tI2Rldi0yMDI2LTA5IiwibW9kZSI6ImRldiIs\nInR5cCI6IlNJQi8xIn0..TsiiVnaPG2mM67NWw8lymlBIkJf4sPfIipGSs7HiIk5\nlDAoRfpLHEicSgPqGkU8beNfCX3cZrIoecGuPO8LUCA\n-----END SIB SIGNATURE-----",
+  "registry": {
+    "signers": [
+      {
+        "signer": "alice@example.com",
+        "keys": [
+          {
+            "kid": "alice@example.com#dev-2026-09",
+            "alg": "EdDSA",
+            "public_key": "kLuSRUl_7PCVjqPo6bOJZ4RJPmDnRS4xWNyVrm7vIYc",
+            "mode": "dev",
+            "enrolled_at": "2026-09-13T14:07:43Z",
+            "attestation_verified": false,
+            "attestation": {},
+            "revoked": false
+          }
+        ]
+      }
+    ]
+  },
+  "inputs": {
+    "now": "2026-09-13T12:00:00Z",
+    "audience": "acme/dev-agent",
+    "mode": "dev"
+  },
+  "expected_status": "unknown_key",
+  "expected_text": "You may deploy the current main branch to staging with scripts/deploy.sh staging whenever the test suite passes."
+}

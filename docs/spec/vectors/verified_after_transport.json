@@ -1,0 +1,31 @@
+{
+  "name": "verified_after_transport",
+  "note": "Quoted with '> ', one line re-wrapped: canonical text unchanged.",
+  "block": "> -----BEGIN SIB SIGNED INSTRUCTION-----\n> You may deploy the current main branch to staging with scripts/deploy.sh staging whenever the test suite passes.\n> -----BEGIN SIB SIGNATURE-----\n> Signer: alice@example.com\n> Expires: 2026-09-13T20:00:00Z\n> Audience: acme/dev-agent\n> \n> eyJhbGciOiJFZERTQSIsImF1ZCI6ImFjbWUvZGV2LWFnZW50IiwiYjY0IjpmYWxz\n> ZSwiY2Fub24iOiJ0ZXh0LzEiLCJjcml0IjpbImI2NCJdLCJleHAiOiIyMDI2LTA5\n> LTEzVDIwOjAwOjAwWiIsImlhdCI6IjIwMjYtMDktMTNUMTE6NTU6MDBaIiwiaXNz\n> IjoiYWxpY2VAZXhhbXBsZS5jb20iLCJqdGkiOiI1Q0dTWjY0TDJmYnBJYVRtIiwi\n> a2lkIjoiYWxpY2VAZXhhbXBsZS5jb20jZGV2LTIwMjYtMDkiLCJtb2RlIjoiZGV2\n> IiwidHlwIjoiU0lCLzEifQ..gj6L6Rv4K_KlUv5REbGfpz1CkhUYKwU9VU9jIOps\n> UDXTdIy2k0qdttKYkrPs8Gf7_beUkON_IE-FGnwwuE4-Cw\n> -----END SIB SIGNATURE-----",
+  "registry": {
+    "signers": [
+      {
+        "signer": "alice@example.com",
+        "keys": [
+          {
+            "kid": "alice@example.com#dev-2026-09",
+            "alg": "EdDSA",
+            "public_key": "kLuSRUl_7PCVjqPo6bOJZ4RJPmDnRS4xWNyVrm7vIYc",
+            "mode": "dev",
+            "enrolled_at": "2026-09-13T14:07:43Z",
+            "attestation_verified": false,
+            "attestation": {},
+            "revoked": false
+          }
+        ]
+      }
+    ]
+  },
+  "inputs": {
+    "now": "2026-09-13T12:00:00Z",
+    "audience": "acme/dev-agent",
+    "mode": "dev"
+  },
+  "expected_status": "verified",
+  "expected_text": "You may deploy the current main branch to staging with scripts/deploy.sh staging whenever the test suite passes."
+}
