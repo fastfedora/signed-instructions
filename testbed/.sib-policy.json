@@ -1,0 +1,9 @@
+{
+  "audience": "acme/dev-agent",
+  "description": "Deployments through scripts/deploy.sh <env> or make deploy require a verified human-signed instruction naming the environment.",
+  "gated": [
+    {"tool": "Bash", "label": "deploy via scripts/deploy.sh", "segment_regex": "^(?:\\S*/)?scripts/deploy\\.sh(\\s|$)"},
+    {"tool": "Bash", "label": "deploy via scripts/deploy.sh", "segment_regex": "^(?:bash|sh)\\s+(?:\\S*/)?scripts/deploy\\.sh(\\s|$)"},
+    {"tool": "Bash", "label": "deploy via make deploy", "segment_regex": "^make\\s+deploy(\\s|$)"}
+  ]
+}

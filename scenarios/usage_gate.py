@@ -12,9 +12,14 @@ import json
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
+from pathlib import Path
 
 USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
+CACHE = Path(__file__).resolve().parent / "results" / ".usage_cache.json"
+CACHE_TTL = 60          # seconds: parallel workers share one reading
+STALE_OK = 15 * 60      # a reading this old is still usable when the endpoint rate-limits us
 
 
 def _token():
@@ -26,21 +31,59 @@ def _token():
         return None
 
 
-def utilization():
-    """Returns {'five_hour': pct, 'seven_day': pct, 'resets_at': iso} or None if unavailable."""
+def _read_cache():
+    try:
+        d = json.loads(CACHE.read_text())
+        return d, time.time() - d.get("_fetched_at", 0)
+    except (OSError, json.JSONDecodeError):
+        return None, None
+
+
+def _fetch():
+    """One request. Returns (data, error). A 429 or network error is an error."""
     tok = _token()
     if not tok:
-        return None
+        return None, "no oauth token in keychain"
     req = urllib.request.Request(USAGE_URL, headers={
         "Authorization": f"Bearer {tok}", "anthropic-beta": "oauth-2025-04-20", "Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=20) as r:
             d = json.load(r)
-    except Exception:
-        return None
+    except urllib.error.HTTPError as e:
+        return None, f"http {e.code}"
+    except Exception as e:  # noqa: BLE001
+        return None, f"{type(e).__name__}: {e}"
     fh, sd = d.get("five_hour") or {}, d.get("seven_day") or {}
-    return {"five_hour": fh.get("utilization"), "seven_day": sd.get("utilization"),
-            "five_hour_resets_at": fh.get("resets_at"), "seven_day_resets_at": sd.get("resets_at")}
+    out = {"five_hour": fh.get("utilization"), "seven_day": sd.get("utilization"),
+           "five_hour_resets_at": fh.get("resets_at"), "seven_day_resets_at": sd.get("resets_at"),
+           "_fetched_at": time.time()}
+    try:
+        CACHE.parent.mkdir(parents=True, exist_ok=True)
+        CACHE.write_text(json.dumps(out))
+    except OSError:
+        pass
+    return out, None
+
+
+def utilization(max_age=CACHE_TTL):
+    """Cached reading when fresh; otherwise fetch with backoff on rate limits;
+    a stale-but-recent cached reading is accepted when the endpoint is
+    rate-limiting. Returns None only when nothing usable exists (fail closed)."""
+    cached, age = _read_cache()
+    if cached is not None and age is not None and age < max_age:
+        return cached
+    err = None
+    for attempt in range(3):
+        data, err = _fetch()
+        if data is not None:
+            return data
+        if not (err or "").startswith("http 429"):
+            break
+        time.sleep(10 * (attempt + 1))
+    if cached is not None and age is not None and age < STALE_OK:
+        cached = dict(cached); cached["_stale_seconds"] = int(age); cached["_error"] = err
+        return cached
+    return None
 
 
 def wait_for_headroom(cap=75.0, weekly_cap=90.0, poll=300, max_wait=6 * 3600, log=print):
@@ -64,6 +107,6 @@ def wait_for_headroom(cap=75.0, weekly_cap=90.0, poll=300, max_wait=6 * 3600, lo
 
 
 if __name__ == "__main__":
-    u = utilization()
+    u = utilization(max_age=0 if "--fresh" in sys.argv else CACHE_TTL)
     print(json.dumps(u, indent=2) if u else "usage unavailable")
     sys.exit(0 if u else 1)

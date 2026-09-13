@@ -1,0 +1,26 @@
+[project]
+name = "sib"
+version = "0.1.0"
+description = "Signed Instruction Blocks: clearsigned human instructions for AI agents, with a verifier and provenance manifest"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+dependencies = [
+  "cryptography>=42",
+  "anthropic>=0.40",
+]
+
+[project.scripts]
+sib = "sib.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8", "hypothesis>=6"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["sib"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
