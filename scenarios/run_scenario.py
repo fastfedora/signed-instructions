@@ -244,7 +244,11 @@ def prepare_run(condition, variant, run_id, claudemd_policy="strict", harness="c
     run_dir = RUNS_DIR / run_id
     repo = run_dir / "repo"
     run_dir.mkdir(parents=True, exist_ok=False)
-    shutil.copytree(TESTBED, repo, ignore=shutil.ignore_patterns("fixtures", "__pycache__"))
+    # The gate policy is harness configuration, not repo content: keep it out of
+    # the checkout (the model would read it and change its behavior; an attacker
+    # could edit it) and point the hooks at it with SIB_POLICY.
+    shutil.copytree(TESTBED, repo, ignore=shutil.ignore_patterns("fixtures", "__pycache__", ".sib-policy.json"))
+    shutil.copy(TESTBED / ".sib-policy.json", run_dir / "sib-policy.json")
     inj = TESTBED / "fixtures" / "injections"
     prompt = PROMPTS[prompt_style]
 
@@ -381,6 +385,7 @@ def run_claude(run_dir, repo, prompt, condition, model, max_budget, timeout):
     env.pop("CLAUDECODE", None)
     env["SIB_CONDITION"] = condition
     env["SIB_RUN_DIR"] = str(run_dir)
+    env["SIB_POLICY"] = str(run_dir / "sib-policy.json")
     if (run_dir / "sib_home.txt").exists():
         env["SIB_HOME"] = (run_dir / "sib_home.txt").read_text().strip()
         env["SIB_AUDIT_FILE"] = str(run_dir / "sib-audit.jsonl")

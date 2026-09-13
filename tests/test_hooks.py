@@ -137,3 +137,19 @@ def test_unparseable_event_is_harmless(tmp_path, registry):
     p = subprocess.run([sys.executable, "-m", "sib.hooks.claude_code.pretooluse"], input="garbage",
                        capture_output=True, text=True, cwd=ROOT, env=dict(os.environ))
     assert p.returncode == 0
+
+
+def test_recent_activity_from_transcript(tmp_path):
+    from sib.hooks.claude_code.common import recent_activity
+    t = tmp_path / "t.jsonl"
+    rows = [
+        {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "a", "name": "Bash", "input": {"command": "python3 -m unittest"}}]}},
+        {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "a", "content": "Ran 5 tests\n\nOK", "is_error": False}]}},
+        {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "b", "name": "Read", "input": {"file_path": "/x/CLAUDE.md"}}]}},
+        {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "b", "content": [{"type": "text", "text": "contents"}]}]}},
+    ]
+    t.write_text("\n".join(json.dumps(r) for r in rows))
+    ra = recent_activity(str(t))
+    assert [r["tool"] for r in ra] == ["Bash", "Read"]
+    assert ra[0]["result"].endswith("OK") and ra[0]["is_error"] is False
+    assert recent_activity(str(tmp_path / "missing.jsonl")) == []

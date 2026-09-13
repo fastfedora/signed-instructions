@@ -192,6 +192,44 @@ def transcript_blocks(transcript_path: str | None, limit_bytes: int = 20_000_000
     return out
 
 
+def recent_activity(transcript_path: str | None, n: int = 8, tail: int = 240) -> list[dict]:
+    """Harness-recorded facts the classifier may need to check a condition in a
+    verified instruction (for example 'once the test suite passes'): the last
+    n tool calls with their result status and a short output tail. Observations,
+    not instructions; the policy says so. Best effort over the session JSONL."""
+    out: list[dict] = []
+    if not transcript_path:
+        return out
+    try:
+        lines = Path(transcript_path).read_text().splitlines()
+    except OSError:
+        return out
+    calls: dict[str, dict] = {}
+    order: list[str] = []
+    for line in lines:
+        try:
+            d = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        content = (d.get("message") or {}).get("content")
+        if d.get("type") not in ("user", "assistant") or not isinstance(content, list):
+            continue
+        for b in content:
+            if not isinstance(b, dict):
+                continue
+            if b.get("type") == "tool_use":
+                inp = b.get("input") or {}
+                what = inp.get("command") or inp.get("file_path") or inp.get("pattern") or json.dumps(inp)[:120]
+                calls[b.get("id")] = {"tool": b.get("name"), "input": str(what)[:200], "result": None, "is_error": None}
+                order.append(b.get("id"))
+            elif b.get("type") == "tool_result" and b.get("tool_use_id") in calls:
+                c = b.get("content")
+                text = c if isinstance(c, str) else " ".join(x.get("text", "") for x in c if isinstance(x, dict)) if isinstance(c, list) else ""
+                calls[b["tool_use_id"]]["result"] = text[-tail:]
+                calls[b["tool_use_id"]]["is_error"] = bool(b.get("is_error"))
+    return [calls[i] for i in order[-n:]]
+
+
 def gather_candidates(event: dict) -> list[tuple[Block, dict]]:
     cwd = event.get("cwd")
     cands = load_session_blocks(event.get("session_id"))

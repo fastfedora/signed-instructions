@@ -64,5 +64,5 @@ def test_malformed_output_is_classifier_error():
 
 def test_prompt_layout_policy_first():
     user = c.user_message(POLICY, manifest([]), CALL)
-    assert list(json.loads(user).keys()) == ["policy", "manifest", "tool_call"]
+    assert list(json.loads(user).keys()) == ["policy", "manifest", "tool_call", "recent_activity"]
     assert "verified" in c.load_policy_text()

@@ -10,7 +10,7 @@ import os
 import time
 
 from ...classifier import classify, ClassifierError
-from .common import run_hook, load_policy, is_gated, assemble_manifest, write_manifest, audit, log
+from .common import run_hook, load_policy, is_gated, assemble_manifest, write_manifest, audit, log, recent_activity
 
 
 def handle(event, t0):
@@ -51,7 +51,8 @@ def handle(event, t0):
     else:
         timeout = float(os.environ.get("SIB_CLASSIFIER_TIMEOUT", "45"))
         try:
-            d = classify(policy, manifest, tool_call, timeout=timeout)
+            d = classify(policy, manifest, tool_call, timeout=timeout,
+                         recent=recent_activity(event.get("transcript_path")))
             record["classifier"] = d.to_dict()
             if d.decision == "allow":
                 # No permissionDecision on purpose; see module docstring.

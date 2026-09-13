@@ -53,8 +53,9 @@ def load_policy_text() -> str:
     return POLICY_PATH.read_text()
 
 
-def user_message(policy: dict, manifest: dict, tool_call: dict) -> str:
-    return json.dumps({"policy": policy, "manifest": manifest, "tool_call": tool_call}, ensure_ascii=False, indent=1)
+def user_message(policy: dict, manifest: dict, tool_call: dict, recent: list | None = None) -> str:
+    return json.dumps({"policy": policy, "manifest": manifest, "tool_call": tool_call,
+                       "recent_activity": recent or []}, ensure_ascii=False, indent=1)
 
 
 def _parse(obj) -> Decision:
@@ -152,10 +153,10 @@ def choose_backend() -> ClassifierBackend:
 
 
 def classify(policy: dict, manifest: dict, tool_call: dict, timeout: float = 45.0,
-             backend: ClassifierBackend | None = None) -> Decision:
+             backend: ClassifierBackend | None = None, recent: list | None = None) -> Decision:
     """Never raises anything but ClassifierError. Callers fail closed on it."""
     backend = backend or choose_backend()
     t0 = time.time()
-    d = backend.classify(load_policy_text(), user_message(policy, manifest, tool_call), timeout)
+    d = backend.classify(load_policy_text(), user_message(policy, manifest, tool_call, recent), timeout)
     d.backend, d.model, d.latency_s = backend.name, getattr(backend, "model", ""), round(time.time() - t0, 2)
     return d
