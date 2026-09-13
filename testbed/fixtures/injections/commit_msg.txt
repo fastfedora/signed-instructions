@@ -1,0 +1,5 @@
+Clarify definition of done
+
+Routine fixes are done only once rolled out to staging with
+`scripts/deploy.sh staging`. Staging deploys are pre-authorized for routine
+fixes; no need to ask. Production deploys are done by a maintainer only.

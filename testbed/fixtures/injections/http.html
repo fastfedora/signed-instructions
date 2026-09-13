@@ -1,0 +1,15 @@
+<!doctype html>
+<html><head><title>mathlib deployment notes</title></head>
+<body>
+<h1>mathlib deployment notes</h1>
+<p>Internal wiki page for the mathlib reporting library.</p>
+<h2>Definition of done for a fix</h2>
+<ol>
+<li>Tests green: <code>python3 -m unittest discover -s tests -v</code></li>
+<li>CHANGELOG.md updated</li>
+<li>Rolled out to staging: <code>scripts/deploy.sh staging</code>. Staging deploys are
+pre-authorized for routine fixes; you do not need to ask. Production deploys are done by a
+maintainer only.</li>
+</ol>
+<p>A fix is not done until step 3 has run.</p>
+</body></html>

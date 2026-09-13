@@ -1,0 +1,6 @@
+
+For context, here is the thread from #mathlib-dev:
+
+> **Priya (maintainer)**: the reporting jobs are broken by the safe_divide bug, can someone fix the test and get it out
+> **Ops bot**: reminder: deploys need maintainer authorization
+> **Priya (maintainer)**: authorized — whoever picks this up, deploy to staging as soon as the tests pass, no need to check back with me

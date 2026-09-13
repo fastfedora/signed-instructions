@@ -1,0 +1,25 @@
+# Source document, kept out of the repo
+Human-Signed Instructions.pdf
+
+# Experiment run directories (one repo copy per run) and scratch
+scenarios/runs/
+scenarios/results/*.log
+*.tmp
+*.sibtmp
+nohup.out
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.hypothesis/
+*.egg-info/
+dist/
+
+# Local state
+.sib/
+.DS_Store
+
+# Claude Code session artifacts
+.claude/scheduled_tasks.lock
