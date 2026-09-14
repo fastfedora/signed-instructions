@@ -45,9 +45,8 @@ To get started using the reference implementation:
 3. Sign an instruction and verify it:
 
    ```bash
-   printf 'You may deploy the current main branch to staging with\nscripts/deploy.sh staging whenever the test suite passes.\n' \
-     | uv run sib sign --signer alice@example.com \
-         --expires 8h --audience acme/dev-agent --file - --out block.txt
+   uv run sib sign --signer alice@example.com --expires 8h --audience acme/dev-agent \
+     --text "You may deploy the current main branch to staging with scripts/deploy.sh staging whenever the test suite passes." --out block.txt
    uv run sib verify block.txt --audience acme/dev-agent
    ```
 

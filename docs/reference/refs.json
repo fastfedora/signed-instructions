@@ -13,5 +13,7 @@
   "load_policy": "hooks.qmd#load_policy",
   "recent_activity": "hooks.qmd#recent_activity",
   "run_hook": "hooks.qmd#run_hook",
-  "transcript_blocks": "hooks.qmd#transcript_blocks"
+  "transcript_blocks": "hooks.qmd#transcript_blocks",
+  "default_kid": "cli.qmd#default_kid",
+  "resolve_signer_and_kid": "cli.qmd#resolve_signer_and_kid"
 }

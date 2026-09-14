@@ -23,38 +23,41 @@ signing and verification in dev mode does.
 
 ## Sign an Instruction
 
-Pipe the instruction into `sib sign`. Before the signature is made, the command shows the exact
+Give the instruction to `sib sign`. Before the signature is made, the command shows the exact
 canonical text and the terms it is about to sign:
 
 ```bash
-printf 'You may deploy the current main branch to staging with\nscripts/deploy.sh staging whenever the test suite passes.\n' \
-  | uv run sib sign --signer alice@example.com \
-      --expires 8h --audience acme/dev-agent --file - --out block.txt
+uv run sib sign --signer alice@example.com --expires 8h --audience acme/dev-agent \
+  --text "You may deploy the current main branch to staging with scripts/deploy.sh staging whenever the test suite passes." \
+  --out block.txt
 ```
 
 ```
 About to sign (canonical form):
   You may deploy the current main branch to staging with scripts/deploy.sh staging whenever the test suite passes.
-  signer=alice@example.com kid=alice@example.com#dev-2026-09 expires=2026-09-13T21:28:10Z audience=acme/dev-agent canon=text/1 mode=dev
+  signer=alice@example.com kid=alice@example.com#dev-2026-09 expires=2026-09-14T19:38:14Z audience=acme/dev-agent canon=text/1 mode=dev
 ```
 
-`block.txt` now holds the instruction in plain text, three clear metadata lines and the detached
-signature, wrapped at 64 columns:
+The key identifier was derived from the signer, since Alice has one enrolled key. `block.txt` now
+holds the instruction in plain text, three clear metadata lines and the detached signature,
+wrapped at 64 columns:
 
 ```
 -----BEGIN SIB SIGNED INSTRUCTION-----
-You may deploy the current main branch to staging with
-scripts/deploy.sh staging whenever the test suite passes.
+You may deploy the current main branch to staging with scripts/deploy.sh staging whenever the test suite passes.
 -----BEGIN SIB SIGNATURE-----
 Signer: alice@example.com
-Expires: 2026-09-13T21:28:10Z
+Expires: 2026-09-14T19:38:14Z
 Audience: acme/dev-agent
 
 eyJhbGciOiJFZERTQSIsImF1ZCI6ImFjbWUvZGV2LWFnZW50IiwiYjY0IjpmYWxz
 ...
-KswmyOjP1u0SoHYEzpHWP2QrruiLVmj6OqF_k8ijERkwDw
+lw__ppkiZhHbmdKlYiqBJq4lsQ2gvOmX2iL_zxYvse6-AA
 -----END SIB SIGNATURE-----
 ```
+
+To sign a longer instruction, put it in a file and pass `--file`; the line structure is not part
+of what is signed under `text/1`.
 
 
 ## Embed It
@@ -78,7 +81,7 @@ uv run --project "$OLDPWD" sib verify CLAUDE.md --audience acme/dev-agent
 ```
 
 ```
-[sib-1] VERIFIED alice@example.com exp=2026-09-13T21:28:10Z aud=acme/dev-agent
+[sib-1] VERIFIED alice@example.com exp=2026-09-14T19:38:14Z aud=acme/dev-agent
      text: You may deploy the current main branch to staging with scripts/deploy.sh staging whenever the test suite passes.
 ```
 
@@ -90,7 +93,7 @@ uv run --project "$OLDPWD" sib verify CLAUDE.md --audience acme/dev-agent
 ```
 
 ```
-[sib-1] INVALID_SIGNATURE alice@example.com exp=2026-09-13T21:28:10Z aud=acme/dev-agent
+[sib-1] INVALID_SIGNATURE alice@example.com exp=2026-09-14T19:38:14Z aud=acme/dev-agent
      error: signature does not verify over the header and canonical text
      text: You may deploy the current main branch to production with scripts/deploy.sh staging whenever the test suite passes.
 ```

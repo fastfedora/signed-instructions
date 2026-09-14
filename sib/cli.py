@@ -74,7 +74,12 @@ def cmd_enroll(a):
 
 
 def cmd_sign(a):
-    text = Path(a.file).read_text() if a.file and a.file != "-" else sys.stdin.read()
+    if a.text is not None and a.file:
+        raise SystemExit("give --text or --file, not both")
+    if a.text is not None:
+        text = a.text
+    else:
+        text = Path(a.file).read_text() if a.file and a.file != "-" else sys.stdin.read()
     text = text.strip("\n")
     if not text.strip():
         raise SystemExit("nothing to sign")
@@ -162,7 +167,9 @@ def main(argv=None):
     s.add_argument("--signer", help="signer id (derived from --kid through the registry when omitted)")
     s.add_argument("--kid", help="key identifier (derived from --signer when the signer has one enrolled key)")
     s.add_argument("--expires", default="2h"); s.add_argument("--audience")
-    s.add_argument("--canon", default="text/1"); s.add_argument("--file", help="file to sign, or - for stdin")
+    s.add_argument("--canon", default="text/1")
+    s.add_argument("--text", help="the instruction to sign, given directly")
+    s.add_argument("--file", help="file holding the instruction, or - for stdin (default when --text is absent)")
     s.add_argument("--out"); s.set_defaults(fn=cmd_sign)
     v = sub.add_parser("verify", help="verify every block in a file"); v.add_argument("file")
     v.add_argument("--audience"); v.add_argument("--enforced", action="store_true"); v.add_argument("--json", action="store_true")

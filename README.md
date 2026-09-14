@@ -27,9 +27,8 @@ export SIB_HOME=$PWD/.sib-local          # keys and registry live here
 uv run sib keygen --signer alice@example.com --enroll
 
 # 2. Sign an instruction (the canonical text is shown before signing)
-printf 'You may deploy the current main branch to staging with\nscripts/deploy.sh staging whenever the test suite passes.\n' \
-  | uv run sib sign --signer alice@example.com \
-      --expires 8h --audience acme/dev-agent --file - --out block.txt
+uv run sib sign --signer alice@example.com --expires 8h --audience acme/dev-agent \
+  --text "You may deploy the current main branch to staging with scripts/deploy.sh staging whenever the test suite passes." --out block.txt
 
 # 3. Paste block.txt anywhere (CLAUDE.md, Slack, email) and verify it later
 uv run sib verify block.txt --audience acme/dev-agent

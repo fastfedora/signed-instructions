@@ -64,3 +64,11 @@ def test_sign_refuses_ambiguous_signer_and_mismatch(sib_home):
     assert rc != 0 and "not 'bob@example.com'" in err
     rc, out, err = run(["sign", "--file", "-"], stdin="x")
     assert rc != 0 and "give --kid or --signer" in err
+
+
+def test_sign_text_flag(sib_home):
+    run(["keygen", "--signer", "alice@example.com", "--enroll"])
+    rc, out, err = run(["sign", "--signer", "alice@example.com", "--text", "Deploy to staging."])
+    assert rc == 0 and "\nDeploy to staging.\n-----BEGIN SIB SIGNATURE-----" in out
+    rc, out, err = run(["sign", "--signer", "alice@example.com", "--text", "x", "--file", "-"], stdin="y")
+    assert rc != 0 and "not both" in err

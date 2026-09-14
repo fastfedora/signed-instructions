@@ -19,9 +19,12 @@ Inside the repository, run it as `uv run sib`. After `source .venv/bin/activate`
 # Create a dev key and enroll it for a signer
 sib keygen --signer alice@example.com --enroll
 
-# Sign an instruction from a file, writing the block to stdout
-sib sign --signer alice@example.com --expires 2h \
-  --audience acme/dev-agent --file instruction.txt
+# Sign an instruction given on the command line, writing the block to stdout
+sib sign --signer alice@example.com --expires 2h --audience acme/dev-agent \
+  --text "You may deploy the current main branch to staging whenever the test suite passes."
+
+# Sign the contents of a file instead
+sib sign --signer alice@example.com --expires 2h --audience acme/dev-agent --file instruction.txt
 
 # Verify every block in a file for a given audience
 sib verify CLAUDE.md --audience acme/dev-agent
@@ -96,8 +99,11 @@ for `--kid`.
 `--canon RULE`
 : Canonicalization rule (default: `text/1`). See [Canonicalization](../components/canonicalization.qmd).
 
+`--text TEXT`
+: The instruction, given directly. Line structure does not matter under `text/1`.
+
 `--file PATH`
-: File holding the instruction, or `-` for standard input (default: standard input).
+: File holding the instruction, or `-` for standard input (default when `--text` is absent).
 
 `--out PATH`
 : Write the block to a file instead of standard output.
