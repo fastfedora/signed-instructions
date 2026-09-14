@@ -9,6 +9,9 @@ warning to standard error.
 All commands read `SIB_HOME` for the directory that holds keys and the registry (default:
 `~/.sib`).
 
+Inside the repository, run it as `uv run sib`. After `source .venv/bin/activate`, or after
+`uv tool install --editable .`, plain `sib` works; the examples below use the plain form.
+
 
 ## Basic Usage
 

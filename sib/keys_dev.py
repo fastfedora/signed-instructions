@@ -13,7 +13,8 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey,
 
 from .b64 import b64u_encode, b64u_decode
 
-DEV_WARNING = "SIB DEV MODE: software key in use; this signature proves possession of a file, not a person."
+DEV_WARNING = ("SIB DEV MODE: currently using software-only keys. Signatures only prove possession of the "
+               "key file, not a verified human.")
 _warned = False
 
 

@@ -39,23 +39,27 @@ To get started using the reference implementation:
 
    ```bash
    export SIB_HOME=$PWD/.sib-local
-   .venv/bin/sib keygen --kid "alice@example.com#dev-2026-09" --enroll --signer alice@example.com
+   uv run sib keygen --kid "alice@example.com#dev-2026-09" --enroll --signer alice@example.com
    ```
 
 3. Sign an instruction and verify it:
 
    ```bash
    printf 'You may deploy the current main branch to staging with\nscripts/deploy.sh staging whenever the test suite passes.\n' \
-     | .venv/bin/sib sign --signer alice@example.com --kid "alice@example.com#dev-2026-09" \
+     | uv run sib sign --signer alice@example.com --kid "alice@example.com#dev-2026-09" \
          --expires 8h --audience acme/dev-agent --file - --out block.txt
-   .venv/bin/sib verify block.txt --audience acme/dev-agent
+   uv run sib verify block.txt --audience acme/dev-agent
    ```
 
 ::: {.callout-important}
 Phase 1 runs in dev mode: keys are software files, and every signing and verification prints a
-warning saying so. A dev-mode signature proves possession of a file, not a person. Biometric
-signing with passkeys is Phase 2.
+warning saying so. A dev-mode signature proves possession of the key file, not a verified human.
+Biometric signing with passkeys is Phase 2.
 :::
+
+`uv run sib` runs the command in the project environment without activating it. To call `sib`
+directly, activate the environment once per shell with `source .venv/bin/activate`; to have it
+available from any directory, install it as a tool with `uv tool install --editable .`.
 
 
 ## Getting Started
@@ -64,7 +68,7 @@ Once a block verifies on the command line, install the hooks into a project so C
 permission decision sees the manifest:
 
 ```bash
-.venv/bin/python -m sib.hooks.claude_code.install --project /path/to/repo
+uv run python -m sib.hooks.claude_code.install --project /path/to/repo
 ```
 
 The installer writes three hooks into the project's `.claude/settings.json` and prints the

@@ -114,7 +114,7 @@ sib verify block.txt --audience acme/dev-agent
 ```
 
 ```text
-SIB DEV MODE: software key in use; this signature proves possession of a file, not a person.
+SIB DEV MODE: currently using software-only keys. Signatures only prove possession of the key file, not a verified human.
 [sib-1] VERIFIED alice@example.com exp=2026-09-13T22:06:30Z aud=acme/dev-agent
      text: You may deploy the current main branch to staging with scripts/deploy.sh staging whenever the test suite passes.
 

@@ -22,7 +22,7 @@ The file is PKCS#8 PEM without a passphrase, written with mode `0600`. Character
 or uses a dev key prints the same line to standard error:
 
 ```text
-SIB DEV MODE: software key in use; this signature proves possession of a file, not a person.
+SIB DEV MODE: currently using software-only keys. Signatures only prove possession of the key file, not a verified human.
 ```
 
 ::: {.callout-important}
@@ -57,7 +57,7 @@ sib keygen --kid "alice@example.com#dev-2026-09" --enroll --signer alice@example
 ```
 
 ```text
-SIB DEV MODE: software key in use; this signature proves possession of a file, not a person.
+SIB DEV MODE: currently using software-only keys. Signatures only prove possession of the key file, not a verified human.
 dev key created for kid alice@example.com#dev-2026-09
 public key: JmbApRbWb-3nVyk_H9vMHMId6bSA_znZfS2_aRnu5Hc
 enrolled alice@example.com#dev-2026-09 for alice@example.com in /tmp/sib-doc-blocks/registry.json (dev mode, attestation_verified=false)

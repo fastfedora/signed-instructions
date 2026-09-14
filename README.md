@@ -24,27 +24,41 @@ uv sync
 export SIB_HOME=$PWD/.sib-local          # keys and registry live here
 
 # 1. A dev key for alice, enrolled in the registry
-.venv/bin/sib keygen --kid "alice@example.com#dev-2026-09" --enroll --signer alice@example.com
+uv run sib keygen --kid "alice@example.com#dev-2026-09" --enroll --signer alice@example.com
 
 # 2. Sign an instruction (the canonical text is shown before signing)
 printf 'You may deploy the current main branch to staging with\nscripts/deploy.sh staging whenever the test suite passes.\n' \
-  | .venv/bin/sib sign --signer alice@example.com --kid "alice@example.com#dev-2026-09" \
+  | uv run sib sign --signer alice@example.com --kid "alice@example.com#dev-2026-09" \
       --expires 8h --audience acme/dev-agent --file - --out block.txt
 
 # 3. Paste block.txt anywhere (CLAUDE.md, Slack, email) and verify it later
-.venv/bin/sib verify block.txt --audience acme/dev-agent
+uv run sib verify block.txt --audience acme/dev-agent
 sed 's/to staging/to production/' block.txt > tampered.txt
-.venv/bin/sib verify tampered.txt --audience acme/dev-agent    # invalid_signature
+uv run sib verify tampered.txt --audience acme/dev-agent    # invalid_signature
 ```
 
-Every dev-mode operation prints a warning: a software key proves possession
-of a file, not a person. Biometric (WebAuthn) signing is Phase 2.
+Every dev-mode operation prints a warning: software-only keys prove possession
+of a key file, not a verified human. Biometric (WebAuthn) signing is Phase 2.
+
+`uv run sib` runs the command in the project environment without activating it.
+To use `sib` directly, activate the environment once per shell:
+
+```bash
+source .venv/bin/activate
+sib --help
+```
+
+To have `sib` available from any directory, install it as a uv tool:
+
+```bash
+uv tool install --editable .
+```
 
 ## Claude Code integration
 
 ```bash
 # hooks into a project's .claude/settings.json, plus the autoMode rule to add by hand
-.venv/bin/python -m sib.hooks.claude_code.install --project /path/to/repo
+uv run python -m sib.hooks.claude_code.install --project /path/to/repo
 ```
 
 The project needs a `.sib-policy.json` naming the audience and the gated

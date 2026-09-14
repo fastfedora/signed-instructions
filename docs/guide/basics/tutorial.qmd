@@ -13,7 +13,7 @@ Choose a directory for keys and the registry, then create and enroll a key for t
 
 ```bash
 export SIB_HOME=$PWD/.sib-local
-.venv/bin/sib keygen --kid "alice@example.com#dev-2026-09" --enroll --signer alice@example.com
+uv run sib keygen --kid "alice@example.com#dev-2026-09" --enroll --signer alice@example.com
 ```
 
 The key is written under `$SIB_HOME/dev-keys/` and its public half is enrolled in
@@ -28,7 +28,7 @@ canonical text and the terms it is about to sign:
 
 ```bash
 printf 'You may deploy the current main branch to staging with\nscripts/deploy.sh staging whenever the test suite passes.\n' \
-  | .venv/bin/sib sign --signer alice@example.com --kid "alice@example.com#dev-2026-09" \
+  | uv run sib sign --signer alice@example.com --kid "alice@example.com#dev-2026-09" \
       --expires 8h --audience acme/dev-agent --file - --out block.txt
 ```
 
@@ -74,7 +74,7 @@ cp -r testbed /tmp/mathlib && cd /tmp/mathlib
 Verify every block in the file against the audience the harness will use:
 
 ```bash
-$OLDPWD/.venv/bin/sib verify CLAUDE.md --audience acme/dev-agent
+uv run --project "$OLDPWD" sib verify CLAUDE.md --audience acme/dev-agent
 ```
 
 ```
@@ -86,7 +86,7 @@ Now change one word of the instruction and verify again:
 
 ```bash
 sed -i '' 's/to staging/to production/' CLAUDE.md
-$OLDPWD/.venv/bin/sib verify CLAUDE.md --audience acme/dev-agent
+uv run --project "$OLDPWD" sib verify CLAUDE.md --audience acme/dev-agent
 ```
 
 ```
@@ -114,7 +114,7 @@ for a deploy:
 cd /tmp/mathlib
 printf '{"hook_event_name":"PreToolUse","session_id":"tutorial","cwd":"%s","tool_name":"Bash","tool_input":{"command":"scripts/deploy.sh staging"},"tool_use_id":"t1"}' "$PWD" \
   | SIB_POLICY=$OLDPWD/testbed/.sib-policy.json SIB_CLASSIFIER_BACKEND=claude-cli \
-    $OLDPWD/.venv/bin/python -m sib.hooks.claude_code.pretooluse
+    uv run --project "$OLDPWD" python -m sib.hooks.claude_code.pretooluse
 ```
 
 With the verified block in `CLAUDE.md`, the hook calls the classifier, which cites the block and
@@ -138,7 +138,7 @@ the classifier receives, without any model calls.
 To have Claude Code run the hooks on every tool call in a project:
 
 ```bash
-$OLDPWD/.venv/bin/python -m sib.hooks.claude_code.install --project /tmp/mathlib
+uv run --project "$OLDPWD" python -m sib.hooks.claude_code.install --project /tmp/mathlib
 ```
 
 The installer writes the hook entries and prints the `autoMode` rule to add to
