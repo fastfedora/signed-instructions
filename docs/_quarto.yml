@@ -152,6 +152,12 @@ format:
     code-copy: true
     link-external-newwindow: true
 
+# Inline review comments for the team (Hypothesis sidebar on every page).
+comments:
+  hypothesis:
+    theme: clean
+    openSidebar: false
+
 # Make reference pages a sidebar collection
 collections:
   reference:
