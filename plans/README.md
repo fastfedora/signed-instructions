@@ -29,11 +29,13 @@ Agent SDK permissions) found:
 - Hooks run **before** everything else in the permission pipeline. A PreToolUse
   hook `deny` is final and the auto-mode classifier never runs. A hook `allow`
   is still passed through the classifier. `ask` falls through to normal flow.
+
 - There is **no documented structured channel** into the auto-mode classifier.
   It reads `CLAUDE.md` and the natural-language `autoMode` policy in user or
   managed settings (project settings cannot define `autoMode`). Hook
   `additionalContext` is visible to the model; whether the classifier sees it
   is not documented.
+
 - The Agent SDK's `canUseTool` callback is a harness-controlled structured
   channel, but the classifier behind it would be ours. Codex CLI is the one
   open-source harness with a real LLM auto-approver (`auto_review`) plus
@@ -55,6 +57,7 @@ So the prototype uses two channels; Phase 0 measured both:
    reason when a gated action has no verified human-signed span behind it.
    This is the PDF's own fallback ("harness-side pre-check", §10 risks).
    Auto mode's classifier still runs on everything we do not deny.
+
 2. **Auto-mode channel (documented, unverified by the classifier).** A
    PostToolUse hook returns the manifest as `classifierContext` on every call,
    and the `autoMode` policy prose tells the classifier to treat only
@@ -109,6 +112,7 @@ parts and the manifest span it yields, is in
 
 - **Language:** Python 3.12, `uv`, `cryptography` + `py_webauthn` (NF-2). CLI via
   `typer`. Local signing app via FastAPI on `localhost`.
+
 - **Envelope v0: clearsigned.** The instruction stays in plain text between
   `-----BEGIN SIB SIGNED INSTRUCTION-----` and `-----BEGIN SIB SIGNATURE-----`;
   a detached signature follows to `-----END SIB SIGNATURE-----`. The
@@ -122,25 +126,30 @@ parts and the manifest span it yields, is in
   the signature is opaque; there is one copy of the instruction and it is the
   signed one. Worked example: `sib-format-example.md`. This departs from the
   PDF's FM-2 suggestion of an encoded payload, for the reason given there.
+
 - **Canonicalization is named in the signed header (`canon`)** from a closed,
   versioned list: `text/1` (NFC, typographic quotes and NBSP folded, all
   whitespace runs collapsed, trimmed), `json/1` (RFC 8785 over the parsed
   value), `raw/1` (exact bytes after NFC). A rule never changes in place. A
   verifier applies only the named rule. Extraction strips a common quote or
   comment prefix found on the marker lines and tolerates dash variants.
+
 - **Signatures:** dev mode Ed25519 (`alg: "EdDSA"`), enforced mode WebAuthn
   ES256 (`alg: "ES256-webauthn"`). WebAuthn challenge = SHA-256 of the
   canonical payload; envelope also carries `authenticatorData`,
   `clientDataJSON`, and `credentialId`. Verifier requires the UV flag.
+
 - **Who is the principal?** In Claude Code the typed prompt is the task
   statement. Actions in the policy's gated class (deploy, push, publish, and
   whatever the demo adds) require a verified SIB. Unsigned text anywhere,
   including the prompt, cannot unlock a gated action. This keeps the rule
   testable and matches G1.
+
 - **Replay (S3):** nonce uniqueness is enforced per `(aud, nonce)` with
   first-seen session binding. The first session that presents a nonce owns it;
   another session presenting the same nonce is a replay. Expiry and audience
   cover the rest. This reconciles "one-time-use" with "verify on every call".
+
 - **Classifier model:** configurable. Default `claude-opus-5` for the demo runs
   where the decision quality is the point; measure `claude-sonnet-5` and
   `claude-haiku-4-5` for latency (NF-3 says small models should suffice).
@@ -150,9 +159,11 @@ parts and the manifest span it yields, is in
   behind a backend protocol so a local model can replace the hosted one,
   either through an Anthropic-Messages-compatible proxy or a second backend
   added in Phase 3.
+
 - **Fail closed on authority.** A hook crash, timeout, or classifier outage
   must deny gated actions, because Claude Code's default on hook error is to
   let the call proceed. Phase 1 specifies the behavior and tests it.
+
 - **Biometric and hardware backing are enrollment assumptions unless
   attestation is verified.** WebAuthn's UV flag also covers PIN and password,
   and with attestation `none` the AAGUID is self-reported. Phase 2 enforces
@@ -188,10 +199,13 @@ and a GitHub comment and must still verify.
 
 - Headless `claude -p` honors `--permission-mode auto`, and hooks plus
   `autoMode` passed through `--settings` apply without a trust prompt.
+
 - The auto-mode classifier does not act on PreToolUse `additionalContext`; it
   does act on PostToolUse `classifierContext` and on `autoMode` prose.
+
 - CLAUDE.md is loaded once per process; hook writes are seen only by a new
   process. The rewrite conditions are dropped.
+
 - Codex: the auto reviewer runs headless under the ChatGPT login, the
   workspace-write sandbox is a real boundary (network and home directory),
   project hooks fire with `--dangerously-bypass-hook-trust`, and the reviewer's
@@ -203,13 +217,17 @@ and a GitHub comment and must still verify.
 - Whether `claude -p` headless runs honor `--permission-mode auto`, so scenarios
   can be scripted. If not, the Agent SDK with `permission_mode` set to auto is
   the fallback for measurement.
+
 - Whether the auto-mode classifier sees PreToolUse `additionalContext`.
+
 - Whether the model and the classifier re-read CLAUDE.md mid-session, and at
   which point (SessionStart, UserPromptSubmit, PreToolUse) a hook write is
   still seen. Also which file location works: project CLAUDE.md,
   CLAUDE.local.md, or user-scope `~/.claude/CLAUDE.md`.
+
 - The exact schema of the `autoMode` settings block (environment / allow /
   soft_deny / hard_deny) in the current auto-mode config doc.
+
 - The current transcript JSONL shape well enough to label spans by message
   role. It is undocumented and may change between releases; the hook parses it
   defensively and the SDK harness (Phase 4) does not need it.

@@ -52,6 +52,7 @@ Three parts:
    the classifier, and exactly what the signature covers. Change one
    character and the signature fails (checked below: `staging` to
    `production` gives `invalid_signature`).
+
 2. **The signature block**, between `BEGIN SIB SIGNATURE` and
    `END SIB SIGNATURE`. Three clear metadata lines for the reader, a blank
    line, then the detached signature: a JWS compact serialization with an
@@ -61,6 +62,7 @@ Three parts:
    instruction text. The clear `Signer:`/`Expires:`/`Audience:` lines are
    convenience copies; the verifier compares them with the signed header
    and reports `metadata_mismatch` if someone edits them.
+
 3. **Surrounding prose.** Ordinary file text with no authority. This is where
    the Phase 0 injection lived.
 

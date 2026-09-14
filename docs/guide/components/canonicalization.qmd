@@ -21,6 +21,7 @@ Two consequences follow:
 
 - The list of rules is closed. A verifier that meets an unknown `canon` value reports `malformed`
   and confers nothing.
+
 - Rules are versioned and never change in place. A change to the fold table below is `text/2`, not
   a new `text/1`, so old signatures keep verifying under the rule they were made with.
 
@@ -32,10 +33,14 @@ Two consequences follow:
   `text_1()`:
 
   1. Unicode NFC normalization.
+
   2. Typographic quotes folded to ASCII: U+2018, U+2019, U+201A and U+201B become `'`; U+201C,
      U+201D, U+201E and U+201F become `"`.
+
   3. Non-breaking spaces folded to a space: U+00A0, U+202F and U+2007.
+
   4. Zero-width characters removed: U+200B, U+200C, U+200D and U+FEFF.
+
   5. Every run of whitespace, including line breaks and tabs, collapsed to one space, and leading
      and trailing whitespace removed.
 
@@ -88,8 +93,10 @@ collapsed, and the zero-width space before the period removed.
 These do not canonicalize to the same string, and a signature over one fails over the other:
 
 - `to staging` and `to production`: a changed word.
+
 - `scripts/deploy.sh` and `scripts/ deploy.sh`: a space inside a token is a real change, because
   runs of whitespace collapse to one space rather than to nothing.
+
 - `1,000` and `1.000`: punctuation is never folded.
 
 Under `raw/1` the first two prose examples differ, because the line breaks fall in different

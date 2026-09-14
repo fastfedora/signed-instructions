@@ -1,6 +1,7 @@
 project:
   type: website
   pre-render:
+    - scripts/pre-render.py
     - reference/filter/sidebar.py
   post-render:
     - scripts/post-render.sh
@@ -24,6 +25,11 @@ website:
   search: true
   repo-url: https://github.com/fastfedora/signed-instructions
   repo-actions: [issue]
+  announcement:
+    content: "**Draft.** This is working documentation for the SIB project team. Pages, numbers and the specification are under revision and may change without notice."
+    type: warning
+    position: below-navbar
+    dismissable: true
 
   navbar:
     left:
@@ -31,6 +37,8 @@ website:
         file: index.qmd
       - text: Specification
         file: spec/index.qmd
+      - text: Project Notes
+        file: project/index.qmd
       - text: Reference
         file: reference/index.qmd
     right:
@@ -83,6 +91,41 @@ website:
           contents:
             - text: Writing Style
               file: contributing/writing-style.qmd
+     - title: Project Notes
+       style: docked
+       contents:
+        - text: Project Notes
+          file: project/index.qmd
+        - section: "Plans"
+          contents:
+            - text: Overview
+              file: project/plans/index.md
+            - text: Format Example
+              file: project/plans/sib-format-example.md
+            - text: Phase 0
+              file: project/plans/phase-0-baseline-attack.md
+            - text: Phase 1
+              file: project/plans/phase-1-minimal-sib.md
+            - text: Phase 2
+              file: project/plans/phase-2-biometric-signing.md
+            - text: Phase 3
+              file: project/plans/phase-3-hardening-and-scenarios.md
+            - text: Phase 4
+              file: project/plans/phase-4-codex-harness.md
+            - text: Phase 5
+              file: project/plans/phase-5-spec-redteam-release.md
+        - section: "Findings"
+          contents:
+            - text: Phase 0
+              file: project/plans/findings/phase-0.md
+            - text: Phase 1
+              file: project/plans/findings/phase-1.md
+        - section: "Attacks"
+          contents:
+            - text: Attack Catalog
+              file: project/attacks.qmd
+            - text: Experiment Results
+              file: project/results.qmd
      - title: Specification
        style: docked
        contents:

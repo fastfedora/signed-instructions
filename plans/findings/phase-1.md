@@ -1,9 +1,10 @@
 # Phase 1 findings: minimal SIB prototype (dev keys)
 
-**Date:** 13 September 2026. **Status:** complete. Acceptance met on every measurable criterion; see the table.
-**Where things are:** library and CLI in `sib/`, hooks in
-`sib/hooks/claude_code/`, classifier in `sib/classifier/`, tests in `tests/`,
-demo in `demo.sh`, scenario results in `scenarios/results/phase1_*.jsonl`.
+**Date:** 13 September 2026.
+
+**Status:** complete. Acceptance met on every measurable criterion; see the table.
+
+**Where things are:** library and CLI in `sib/`, hooks in `sib/hooks/claude_code/`, classifier in `sib/classifier/`, tests in `tests/`, demo in `demo.sh`, scenario results in `scenarios/results/phase1_*.jsonl`.
 
 ## What was built
 
@@ -12,15 +13,18 @@ demo in `demo.sh`, scenario results in `scenarios/results/phase1_*.jsonl`.
   header plus the canonical text. Header uses JOSE/JWT names plus `canon` and
   `mode`. Canonicalization rules `text/1` and `raw/1`; `json/1` is Phase 3.
   Tolerant extractor: dash variants, common quote/comment prefix, re-wrapping.
+
 - **Verifier.** Deterministic, no LLM. Statuses: verified, invalid_signature,
   unknown_signer, unknown_key, expired, not_yet_valid, audience_mismatch,
   metadata_mismatch, malformed, nonce_replayed, revoked,
   dev_key_in_enforced_mode. Every failing status still reports the claims the
   block makes, labelled by status, so the gate and the classifier can name
   what they refuse. Nonce and revocation are stubs (Phase 3).
+
 - **Manifest** v0.1 with origins (`prompt`, `project_instructions`,
   `tool_result`, `assistant`), and a `classifierContext` rendering under
   2,000 characters.
+
 - **Hooks.** UserPromptSubmit stores pasted blocks and tells the model which
   instructions are verified (model-facing `additionalContext`). PreToolUse
   runs the verifier on every tool call, writes the manifest, and gates
@@ -28,6 +32,7 @@ demo in `demo.sh`, scenario results in `scenarios/results/phase1_*.jsonl`.
   classifier call when a verified span exists, `ask` on ambiguity, no
   decision (never `allow`) when covered. PostToolUse returns the
   `classifierContext` note on every call. All three fail closed on authority.
+
 - **Classifier.** Policy in `sib/classifier/policy.md`; structured output
   `{decision, cited_span_ids, reason}`. Two backends: Anthropic SDK
   (`output_config.format`) when an API key is present, and `claude -p
@@ -35,9 +40,11 @@ demo in `demo.sh`, scenario results in `scenarios/results/phase1_*.jsonl`.
   available in this environment, so the scenario runs used the `claude -p`
   backend with Sonnet 5. One classifier call measured at about 3 s and $0.03
   list price.
+
 - **CLI.** `sib keygen --enroll`, `sib sign`, `sib verify`, `sib inspect`,
   `sib enroll`. `sign` prints the canonical text and the terms before
   signing. Every dev-mode operation prints the dev warning to stderr.
+
 - **Installer.** `python -m sib.hooks.claude_code.install --project <repo>`
   writes the hook entries and prints the `autoMode` rule for user settings;
   `--settings-json` writes a combined file for `claude --settings`.
@@ -120,14 +127,17 @@ policy now stays outside the repo, where harness configuration belongs.
   plan said `additionalContext` is model-facing only; that is what this is,
   and without it Sonnet 5 saw a signed block it did not understand and asked
   instead of acting. It is not a channel to the classifier.
+
 - Scenario 1 pairs the signed block with the plain definition-of-done
   runbook (deploy listed as a step, no authorization claim), because with the
   clean runbook the model had no task reason to deploy and correctly left it
   alone whether or not a signed block existed.
+
 - The gated-action list lives in `.sib-policy.json` inside the repo, which an
   attacker who can edit the repo could also edit. The `SIB_POLICY`
   environment variable overrides it; moving the gated class to user scope is
   a Phase 3 item.
+
 - With zero verified spans the gate denies deterministically without a
   classifier call. The plan called the classifier for every gated call; the
   policy answer is fixed in that case, so the call was dropped.

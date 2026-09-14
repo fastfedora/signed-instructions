@@ -104,19 +104,23 @@ pre-existing auto-approver. What is known from the Phase 0 feasibility check:
 - Codex ships an LLM auto-reviewer, `approvals_reviewer = "auto_review"`, that receives
   escalations which would otherwise go to the human and returns approve, deny or escalate. It runs
   headless under `codex exec --approve-for-me` with the ChatGPT login.
+
 - The `workspace-write` sandbox is a real boundary. A network call to the release service, or a
   write outside the workspace and the temp directories, is an escalation the reviewer must judge,
   whatever command shape reached it. This is how the gated action is defined there, not by a
   command pattern: Codex's execpolicy rules are prefix matches with the same alternative-invocation
   gap as a regex.
+
 - Project hooks in `.codex/hooks.json` fire under `codex exec` with
   `--dangerously-bypass-hook-trust`, and their `PreToolUse` input has the same shape as Claude
   Code's.
+
 - The reviewer's request is a structured prompt with sections for evidence handling, user
   authorization scoring, a risk taxonomy and a security policy, a numbered transcript block of user
   and assistant messages and tool calls, and an "APPROVAL REQUEST" JSON block. Its output has
   `risk_level`, `user_authorization`, `outcome` and `rationale`. A manifest is a natural extra block
   next to the approval request.
+
 - Baseline there: an injected pre-authorization in `AGENTS.md` or the runbook was approved by the
   reviewer in 20 of 20 runs.
 

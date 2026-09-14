@@ -1,7 +1,8 @@
 # Phase 3 — Hardening, four scenarios, transport, attack suite, README spec
 
-**Estimate:** 1–2 weeks. **Prerequisites:** Phase 2 green.
-Completing this phase equals the workshop-prize scope (PDF §8).
+**Estimate:** 1–2 weeks.
+
+**Prerequisites:** Phase 2 green. Completing this phase equals the workshop-prize scope (PDF §8).
 
 ## Goal
 
@@ -14,7 +15,9 @@ spec with test vectors.
 
 - Every threat S1–S5 maps to a rule in the spec and a failing test that the
   implementation passes.
+
 - The SIB survives Slack, email, and a GitHub comment unchanged in meaning.
+
 - Someone else can clone the repo and reach a verified classifier decision in
   under 15 minutes (RI-5 target, measured on one volunteer).
 
@@ -25,11 +28,14 @@ spec with test vectors.
 - `nonce_store.py`: SQLite or JSONL under `~/.sib/state/`. Key `(aud, nonce)`
   → first-seen `session_id`. Same session re-verifying is fine; a different
   session → `nonce_replayed`.
+
 - Clock skew allowance (proposal: 60 s) on `iat`; `exp` strict. `exp - iat`
   capped by policy (proposal: 24 h default, configurable).
+
 - Audience: the harness passes its audience id to the verifier (from the
   testbed `policy.yaml` or `SIB_AUDIENCE`). Missing `aud` in a block is
   allowed only in dev mode.
+
 - Revocation: `~/.sib/revoked.jsonl` of `(kid, nonce)` or whole-key entries;
   `sib revoke <block|kid>` appends; verifier checks it (`revoked`).
 
@@ -39,8 +45,10 @@ spec with test vectors.
   pasted by the operator), `tool_result` (with tool name and, for file reads,
   the path), `assistant` (agent-authored), `subagent` (with `agent_id` /
   `agent_type` from the hook input when available).
+
 - Manifest gains a `context` summary: counts per role and the list of
   envelope-bearing messages. Everything else remains implicitly unsigned.
+
 - The classifier reason string always names the origin of the nearest
   unsigned authority claim when denying, so demos read well.
 
@@ -49,6 +57,7 @@ spec with test vectors.
 - Scenarios 1–4 from `plans/README.md` as YAML under `scenarios/`, run by the
   Phase 0 runner, each with an `expected` block (deploy marker present or
   absent, decision, status values in the manifest, cited span ids).
+
 - `make demo` runs all four and prints a pass/fail table plus rates.
 
 ### 3.4 Transport round-trips (TR-1, TR-2, S5)
@@ -59,9 +68,11 @@ spec with test vectors.
   code-fence wrapping, HTML entity escaping of `& < >`, trailing whitespace,
   CRLF, zero-width spaces, NBSP, Slack `<url|text>` link rewriting inside the
   instruction text.
+
 - Manual round-trips recorded in findings: paste through Slack (message,
   thread reply, snippet), Gmail plain and HTML, a GitHub PR comment, and back
   into a file. Each verifies.
+
 - Negative: the clear `Expires:` line edited while the signed header is
   untouched gives `metadata_mismatch`; the instruction text edited by one
   character gives `invalid_signature`. There is no unsigned copy of the
@@ -99,6 +110,7 @@ Plus fuzzing of the extractor and canonicalizer with `hypothesis`.
   Open spec questions carried in: what "biometric" can mean given WebAuthn's
   UV semantics (allowlist versus enterprise attestation versus Secure
   Enclave), and the localhost origin binding from Phase 2.
+
 - `spec/test-vectors/`: JSON files of valid and invalid blocks with expected
   status, generated from the test suite so they cannot drift.
 
@@ -119,14 +131,18 @@ Plus fuzzing of the extractor and canonicalizer with `hypothesis`.
 
 - All of the above, plus `plans/findings/phase-3.md` with transport results
   and the volunteer quick-start timing.
+
 - Short write-up (2–3 pages) suitable for the workshop submission.
 
 ## Acceptance
 
 - `make demo`: 4 of 4 scenarios pass on three consecutive runs.
+
 - Attack suite green in CI; every S1–S5 threat has at least one test that
   fails when its defense is disabled (mutation check, done by hand once).
+
 - Slack, email, and GitHub comment round-trips verify.
+
 - A volunteer reaches a verified classifier decision in under 15 minutes from
   clone, following only the README.
 
@@ -140,6 +156,7 @@ SP-4 (lite), RI-1 (minus Slack bot), RI-3 (internal suite), RI-5 (quick start).
 - Slack may mangle the envelope in a way the tolerant extractor does not
   cover. The simulation list is a hypothesis; the manual round-trips are the
   truth. Budget a day for surprises.
+
 - Nonce store on the verifier host is state; multiple harness instances on
   one machine share it by design, across machines they do not. Document as a
   v1 limitation.

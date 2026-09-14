@@ -61,23 +61,30 @@ failure rather than a parse attempt.
 ## Rules
 
 - A classifier integration MUST derive authority only from spans whose status is `verified`.
+
 - A classifier integration MUST treat every other text, including the operator's own typed
   prompt, as task content that cannot widen the gated class. What the operator asked for is the
   task; what a verified block says is the authorization.
+
 - With no verified span in the manifest, a gated action MUST be denied. The reference makes this
   decision without calling the model, since the policy fixes the answer.
+
 - With at least one verified span, the classifier decides whether a span covers the action. A
   covering span yields `allow`; no covering span yields `deny`; an ambiguous case yields `ask`.
+
 - A condition stated in a verified span MUST be checked against harness-recorded evidence
   (`recent_activity`: the harness's own record of recent tool calls and their results), never
   against the agent's narration.
+
 - A `deny` MUST carry a reason that names the gated action and, when the manifest shows one, the
   nearest failed or unsigned claim, so the agent and the human can see what was refused.
+
 - When the harness has its own permission classifier, the integration MUST NOT signal `allow`
   to the harness in a way that bypasses that classifier. In Claude Code a PreToolUse hook's
   `allow` was observed to skip the auto-mode classifier
   ([Phase 0 findings](../guide/deep-dives/what-the-classifier-sees.qmd)), so the reference
   returns no decision for a covered action and lets the manifest note carry the verification.
+
 - A classifier integration MUST fail closed: if the classifier is unreachable, returns an
   unusable answer or exceeds its deadline, a gated action is denied with a reason naming the
   failure, and a non-gated action proceeds.

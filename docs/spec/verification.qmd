@@ -37,31 +37,44 @@ Each step names the status produced when it fails. The first failing step decide
 
 1. Split the signature segment on `.`. If there are not exactly three parts, or the middle part
    is not empty, the result is `malformed`.
+
 2. Decode the first part as base64url JSON. If it does not decode, if `typ` is not `SIB/1`, if
    `b64` is not `false`, if `crit` does not contain `b64`, if `alg` or `mode` is outside its
    closed list, if a required field is missing, or if `iat` or `exp` is not an RFC 3339 UTC
    timestamp, the result is `malformed`.
+
 3. Canonicalize the instruction segment with the rule in `canon`. If the rule is unknown, the
    result is `malformed`.
+
 4. Look up `kid` in the registry. If it is absent and `iss` is not a known signer, the result is
    `unknown_signer`. If it is absent and `iss` is known, the result is `unknown_key`.
+
 5. If the registry entry belongs to a signer other than `iss`, or its algorithm differs from
    `alg`, the result is `unknown_key`.
+
 6. If the verifier is in `enforced` mode and either the header `mode` or the key's mode is
    `dev`, the result is `dev_key_in_enforced_mode`.
+
 7. Compute the signing input from the first part and the canonical instruction. Verify the third
    part with the primitive named by `alg` and the registry public key. If verification fails, the
    result is `invalid_signature`.
+
 8. Compare each recognized clear metadata line with the header (`Signer` with `iss`, `Expires`
    with `exp`, `Audience` with `aud`). If any differs, the result is `metadata_mismatch`.
+
 9. If `now` plus 60 seconds is earlier than `iat`, the result is `not_yet_valid`.
+
 10. If `now` is at or after `exp`, the result is `expired`.
+
 11. If the header has no `aud` and the verifier is in `enforced` mode, the result is
     `audience_mismatch`. If the header has `aud`, the verifier was given an audience, and they
     differ, the result is `audience_mismatch`.
+
 12. If the registry entry is marked revoked, the result is `revoked`.
+
 13. Ask the nonce store whether `jti` may be honored for this audience and session. If not, the
     result is `nonce_replayed`.
+
 14. The result is `verified`.
 
 A verifier MUST run the steps in this order. Steps 9 to 13 run only on a block whose signature

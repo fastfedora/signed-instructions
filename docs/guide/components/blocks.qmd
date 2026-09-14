@@ -126,6 +126,7 @@ So the signature covers:
 
 - **Every header field**: signer, key, times, nonce, audience, mode and the canonicalization rule.
   None can be changed without invalidating the signature.
+
 - **The instruction's words**: change one character of a word and the signature fails. Changing
   `staging` to `production` in the block above yields `invalid_signature`.
 
@@ -134,8 +135,10 @@ It does not cover:
 - **Line structure and spacing**: under `text/1` every run of whitespace, including line breaks,
   collapses to one space before signing. A re-wrapped copy verifies. If line structure matters,
   sign with `raw/1`.
+
 - **The clear metadata lines**: they are checked for consistency with the header, not signed
   directly. Editing them produces `metadata_mismatch`, not `invalid_signature`.
+
 - **Anything outside the markers**: surrounding prose has no authority, whatever it says.
 
 
@@ -147,10 +150,13 @@ block that has passed through Slack, email or a Markdown renderer rarely comes b
 
 - **Dash variants**: marker lines match `-----`, `—---` and the other dash characters editors
   substitute for a run of hyphens.
+
 - **Common prefix**: whatever precedes the dashes on the opening marker line (e.g., `> `, `# `,
   `// `) is stripped from every line of the block. A blank quoted line (`>`) is treated as blank.
+
 - **Re-wrapping**: inside the signature segment, everything that is not a base64url character or a
   dot is discarded, so the 64-column wrapping can change freely.
+
 - **Unterminated fragments**: a `BEGIN` without its `END` is skipped, never guessed at.
 
 The extractor never alters the instruction text beyond prefix stripping; canonicalization is the

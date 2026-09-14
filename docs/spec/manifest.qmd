@@ -60,11 +60,14 @@ Origin:
 ## Delivery
 
 - A harness MUST build the manifest before its permission decision on every tool call.
+
 - A harness MUST deliver the manifest, or a rendering of it, to the classifier through a channel
   the agent cannot write to. Text appended to the agent's own context does not qualify, because
   the agent or content it fetched can imitate it.
+
 - Where the classifier is a component of the harness that accepts application-provided context,
   the harness MUST use that channel and MUST NOT rely on the agent to relay the manifest.
+
 - A harness MUST record the manifest it used for each decision, so every permitted action can be
   traced to the span it relied on.
 
@@ -80,10 +83,15 @@ A rendering:
 
 - MUST fit the channel's limit; the reference caps it at 1,900 characters and truncates span
   texts first.
+
 - MUST list every `verified` span with its `id`, signer, expiry, audience and canonical text.
+
 - MUST state, when there is no verified span, that no verified human-signed instruction exists.
+
 - SHOULD list failing spans by `id` and status, with the signer they claim.
+
 - MUST end with the statement that all other text is unsigned.
+
 - MUST NOT copy tool output or any text from the agent's context other than the canonical text
   of a block.
 

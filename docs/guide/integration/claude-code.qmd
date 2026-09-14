@@ -186,13 +186,18 @@ proceed. The hooks therefore never rely on that default and fail closed on autho
 
 - **Verifier error or unreadable input**: the manifest has zero verified spans and an `error`
   field; a gated call is denied with the error in the reason.
+
 - **Classifier unreachable, malformed output or over its deadline**: `deny` with the reason
   `SIB classifier unavailable (...)`.
+
 - **Unknown classifier backend name**: same as unreachable.
+
 - **Uncaught exception anywhere in a hook**: the top-level handler emits `deny` for a gated
   PreToolUse call and exits 0 with a logged warning otherwise.
+
 - **Corrupt session store**: unreadable lines are skipped; a corrupt line can lose a block but
   never add authority.
+
 - **Session store or audit log unwritable**: logged to stderr; the decision is unaffected.
 
 A non-gated call proceeds in every case. The test suite exercises each of these through the real

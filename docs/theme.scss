@@ -298,3 +298,35 @@ p code:not(.sourceCode),li code:not(.sourceCode),td code:not(.sourceCode) {
     margin-bottom: 0.5em;
 }
 
+
+
+/* Lists whose items are paragraphs. In Markdown a list written with blank lines between its items
+   (a "loose" list) renders each item's text inside <p>, which is the signal that the items are
+   blocks rather than a run of short entries. Give those items room. */
+li > p {
+    margin-bottom: 0.5rem;
+}
+
+li > p:last-child {
+    margin-bottom: 0.75rem;
+}
+
+li:last-child > p:last-child {
+    margin-bottom: 0;
+}
+
+/* Explicit form for a tight list that should still read as blocks:
+   ::: {.blockList}  ...list...  :::   */
+.blockList > ul > li,
+.blockList > ol > li,
+ul.blockList > li,
+ol.blockList > li {
+    margin-bottom: 0.75rem;
+}
+
+.blockList > ul > li:last-child,
+.blockList > ol > li:last-child,
+ul.blockList > li:last-child,
+ol.blockList > li:last-child {
+    margin-bottom: 0;
+}

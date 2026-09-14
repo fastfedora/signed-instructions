@@ -137,10 +137,13 @@ The note follows the rules Claude Code sets for the field and a few of its own:
 - **Length**: at most 1,900 characters. Claude Code caps the field at 2,000 per tool call, shared
   across every hook that responds. Span texts are trimmed to 200 characters first, then the whole
   note is truncated.
+
 - **Factual**: a statement about provenance, never a request. The classifier treats it as
   unverified application context that cannot establish user intent, which is the right weight.
+
 - **Never copied tool output**: the note carries only what the verifier produced. Copying
   untrusted text into it would hand an attacker the channel.
+
 - **On every call**: the classifier discards notes attached to read-only lookups and keeps the
   rest in its transcript, so the hook attaches the note to every tool call rather than trying to
   guess which ones count.

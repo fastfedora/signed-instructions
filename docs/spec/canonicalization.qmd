@@ -26,7 +26,9 @@ suffix (`text/2`). A verifier MAY implement several versions side by side.
 Input: the instruction segment as a Unicode string. Output: a Unicode string.
 
 1. Apply Unicode Normalization Form C.
+
 2. Replace or remove each character in the fold table below.
+
 3. Split the string on runs of Unicode whitespace, as defined by the `White_Space` property, and
    join the parts with a single U+0020. This collapses every run of spaces, tabs and line breaks
    to one space and removes leading and trailing whitespace.
@@ -77,9 +79,11 @@ Signers
 
 - A signer MUST apply the rule named in `canon` to the instruction before computing the signing
   input.
+
 - A signer MUST show the signer the canonical form of the instruction, together with `iss`,
   `exp`, `aud` and `canon`, before the signing key is used. The text the human approves is the
   canonical text, not the text as typed.
+
 - A signer SHOULD default to `text/1` for prose.
 
 Verifiers
@@ -94,5 +98,6 @@ Adding a rule
 - A proposal for a new rule MUST include a collision analysis: which distinct inputs map to the
   same canonical form, and an argument that no such pair differs in meaning for the kind of
   content the rule is for.
+
 - A proposal MUST include test vectors for the rule, including inputs that differ only by the
   transformations the rule is meant to absorb.

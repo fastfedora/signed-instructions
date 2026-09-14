@@ -90,17 +90,23 @@ them touches a guarantee.
 - **Host or keychain compromise**: An attacker who controls the machine that runs the verifier can
   rewrite the manifest. The verifier is the trusted computing base, not a defense against its own
   host.
+
 - **Sensor spoofing**: Fooling the fingerprint or face sensor on the signing device.
+
 - **Coerced or careless signing**: A human tricked or pressured into signing something they should
   not. The signing interface shows the exact canonical text before the prompt, and that is where
   the responsibility ends.
+
 - **Side channels**: Timing and similar information leaks.
+
 - **Classifier judgment**: Whether the classifier reads a genuine instruction correctly, including
   being argued into a wider reading than the human intended. The design guarantees the classifier
   cannot be lied to about authorship; it does not guarantee the classifier reasons well about a
   true instruction.
+
 - **Identity binding**: The registry maps a signer id to enrolled keys. Binding that id to a real
   person is the job of an external directory.
+
 - **Audit storage**: The verifier emits a manifest on every tool call. Recording and analyzing it is
   the harness's responsibility.
 

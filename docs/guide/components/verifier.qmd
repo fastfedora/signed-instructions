@@ -15,25 +15,36 @@ order is deliberate: a tampered instruction reports `invalid_signature` before a
 dates or audience, so the report names the most important fact first.
 
 1. Split the signature into `header..signature`. Any other shape is `malformed`.
+
 2. Decode the header and validate it: required fields present, `typ` is `SIB/1`, `b64` is false
    and listed in `crit`, `alg` and `mode` are on their closed lists, timestamps parse. Otherwise
    `malformed`.
+
 3. Canonicalize the instruction under the rule named by `canon`. An unknown rule is `malformed`.
+
 4. Look up `kid` in the registry. A key that is not enrolled is `unknown_key` if the signer is
    known and `unknown_signer` if not. A key enrolled for a different signer, or with a different
    algorithm than the header names, is `unknown_key`.
+
 5. In enforced mode, a block or key marked `dev` is `dev_key_in_enforced_mode`.
+
 6. Verify the signature over the signing input (`BASE64URL(header) || "." || canonical text`) with
    the enrolled public key. A failure is `invalid_signature`.
+
 7. Compare the clear `Signer`, `Expires` and `Audience` lines with the header. A difference is
    `metadata_mismatch`.
+
 8. Check the times: `iat` more than the clock skew in the future is `not_yet_valid`; `exp` at or
    before now is `expired`.
+
 9. Check the audience: a block whose `aud` differs from the harness's audience is
    `audience_mismatch`. A block with no `aud` is accepted in dev mode and is `audience_mismatch`
    in enforced mode.
+
 10. A key marked revoked in the registry is `revoked`.
+
 11. Ask the nonce store whether `jti` has been used by another session. If so, `nonce_replayed`.
+
 12. Otherwise `verified`.
 
 The clock skew is 60 seconds and applies to `iat` only. Expiry is strict.
@@ -74,6 +85,7 @@ changes two checks:
 - **Dev keys**: in enforced mode, a block whose header says `mode: dev`, or whose key was enrolled
   in dev mode, is `dev_key_in_enforced_mode`. Software keys prove possession of a file, not a
   person, and enforced mode refuses them outright rather than trusting a label.
+
 - **Missing audience**: dev mode accepts a block with no `aud`; enforced mode does not.
 
 Every dev-mode signing and verification prints the same warning to standard error so that nobody
@@ -87,6 +99,7 @@ Two checks exist in the order above but cannot fail yet:
 - **Nonce store**: `NoopNonceStore` in `sib.nonce_store` answers yes to every check. Phase 3
   replaces it with a store keyed by `(aud, jti)` that records the first session to present a
   block, so the same block from a second session is `nonce_replayed`.
+
 - **Revocation**: the registry carries a `revoked` flag per key and the verifier honors it, but no
   command sets it yet. `sib revoke` and a revocation list are Phase 3 items.
 

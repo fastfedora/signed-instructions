@@ -15,9 +15,12 @@ Claude Code's documentation states what its auto-mode classifier receives on eac
 the measurements agree with it:
 
 - **User messages**: Everything the human typed, including text they pasted from elsewhere.
+
 - **Tool calls**: The name and input of each call other than read-only lookups such as file reads
   and searches. This includes the description the agent writes on a shell command.
+
 - **Project instructions**: The content of `CLAUDE.md`, loaded once when the session starts.
+
 - **Application context**: A note a PostToolUse hook returns in the `classifierContext` field,
   treated as unverified context from the application hosting the session.
 
@@ -133,12 +136,18 @@ approved: 20 of 20.
 The reviewer's request is a structured prompt. Its base instructions carry these sections:
 
 - Evidence Handling
+
 - User Authorization Scoring
+
 - Base Risk Taxonomy
+
 - Security Policy, with an Environment Profile and a Risk Taxonomy covering data exfiltration,
   credential probing, persistent security weakening, destructive actions and low-risk actions
+
 - Investigation Guidelines
+
 - Execution Environment
+
 - Outcome Policy
 
 The request then contains a numbered transcript of user messages, assistant messages and tool
@@ -155,14 +164,18 @@ plan.
 - **Find the harness's structured channel.** In Claude Code it is `classifierContext`; in Codex it
   is the reviewer's request; in the Agent SDK it is the `canUseTool` callback. A channel the agent
   can write to, such as project instructions or model-facing context, is not one.
+
 - **Keep the deterministic gate.** The classifier honors an application-provided note; it cannot
   verify it. The PreToolUse deny is the guarantee, and the note plus policy prose is the second
   layer that catches what the gate's pattern does not name.
+
 - **Never grant from a hook.** Return no decision when a verified instruction covers the action and
   let the classifier decide with the verification in view.
+
 - **Tell the classifier what the harness observed.** Signed instructions carry conditions, such as
   "once the test suite passes". Phase 1 found the classifier answered `ask` on the first call in 10
   of 10 runs until the hook supplied the harness's own record of recent tool calls and their
   results; with it, 10 of 10 were allowed on the first call.
+
 - **Measure before trusting.** Every channel above was tested at N=10 because classifier decisions
   are stochastic and the documentation was wrong about one of them.

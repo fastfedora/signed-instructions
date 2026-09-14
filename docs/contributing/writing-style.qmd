@@ -11,17 +11,23 @@ projects read the same way, and they apply to every page under `docs/`.
 
 - Write in the present tense, about the system: "The verifier applies the rule
   named in the header." Describe what the software does, not what it will do.
+
 - Address the reader as "you" only in instructions and tutorials. Never write
   "we".
+
 - State facts plainly. Do not hedge with "simply", "just", or "easily", and do
   not sell.
+
 - Prefer one idea per sentence. Sentences average about twenty words; a long
   sentence is fine when it carries one idea, and a short one is fine when it
   carries a warning.
+
 - Contractions are acceptable in prose ("it's", "don't"), not in reference
   material.
+
 - Use "for instance" and "e.g." for examples, in parentheses when the example
   is short: "(e.g., `alice@example.com`)".
+
 - No Oxford comma: "unit, integration and end-to-end tests".
 
 
@@ -29,14 +35,19 @@ projects read the same way, and they apply to every page under `docs/`.
 
 - Every page starts with YAML front matter carrying `title`. The body has no
   level-one heading; the title is it.
+
 - The first paragraph is a lead: one or two sentences saying what the page
   covers and why it matters. Then the sections.
+
 - Sections are level-two headings in Title Case ("Getting Started", "Run a
   Basic Eval"). Subsections are level three; option groups and small
   divisions are level four. Do not go deeper.
+
 - Leave two blank lines before every level-two heading and one before lower
   headings.
+
 - Hard-wrap prose at 100 columns. Code blocks and tables are exempt.
+
 - End index-style pages with a "Learning More" section: a bulleted list of
   links, each followed by a colon and a one-line description of the page.
 
@@ -47,22 +58,33 @@ projects read the same way, and they apply to every page under `docs/`.
   starting with `: `) for terminology, CLI options, and any set of named
   things with a sentence of explanation each. Indent continuation lines by two
   spaces.
+
 - Use a bulleted list for parallel items. When each item names something,
   bold the name and follow it with a colon: `- **Term**: description`. When
   each item is a link, use the link as the name: `- [Page](page.qmd): what it
   covers`.
+
 - Use a numbered list for steps. Put a code block under a step when the step
   is a command.
+
 - Keep each item to a sentence or two. A paragraph belongs outside the list.
+
+- When any item in a list runs to more than one line, write the list loose: one blank line
+  between items. Markdown then renders each item as a paragraph and the theme spaces them. A
+  tight list (no blank lines) is for short entries that read as a run. For a tight list that must
+  still read as blocks, wrap it in `::: {.blockList}` and `:::`.
 
 
 ## Code and Names
 
 - Put file names, commands, flags, field names and values in backticks.
+
 - Give every code block a language. Bash blocks may open with a `#` comment
   saying what the command does.
+
 - Show real output where the page is about output. Do not invent values;
   copy them from a run.
+
 - Name the header fields by their short JOSE names (`alg`, `kid`, `iss`) and
   expand each the first time a page uses it.
 
@@ -71,8 +93,10 @@ projects read the same way, and they apply to every page under `docs/`.
 
 - Link to other pages by relative `.qmd` path: `[Verifier](../components/verifier.qmd)`.
   Link to a section with a fragment: `[Statuses](verifier.qmd#statuses)`.
+
 - Link external standards inline the first time they are named, with the RFC
   number in the text: "[RFC 7797](https://www.rfc-editor.org/rfc/rfc7797)".
+
 - Class and function names in backticks link to the reference automatically
   when the reference page documents them; do not hand-link them.
 
@@ -82,9 +106,12 @@ projects read the same way, and they apply to every page under `docs/`.
 Use Quarto callouts sparingly, one per section at most:
 
 - `.callout-note` for a fact the reader might otherwise miss.
+
 - `.callout-tip` for a shortcut or a recommended practice.
+
 - `.callout-important` for something that changes what the reader must do,
   such as the dev-mode warning.
+
 - `.callout-warning` for a security consequence.
 
 
@@ -95,11 +122,14 @@ and use it consistently after that. In particular:
 
 - "signed instruction block", or "block" once the context is clear; never
   "SIB block" or "envelope" outside the format specification.
+
 - "signer" for the human, "harness" for the runtime that executes tool calls,
   "classifier" for the model that decides whether an action may run, and
   "verifier" for the deterministic component that checks signatures.
+
 - "verified" only for a block whose status is `verified`. A block that failed
   is described by its status, never as "invalid" alone.
+
 - "dev mode" and "enforced mode", not "test mode" or "production mode".
 
 

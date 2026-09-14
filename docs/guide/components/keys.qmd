@@ -142,8 +142,10 @@ The verifier's mode comes from the harness (`SIB_MODE`, default `dev` in Phase 1
 in every manifest. The two modes differ in three places:
 
 - **Dev keys**: accepted in dev mode, refused in enforced mode.
+
 - **Audience**: a block with no `aud` is accepted in dev mode and is `audience_mismatch` in
   enforced mode.
+
 - **Warnings**: dev mode prints its warning on every operation. Enforced mode is silent.
 
 Nothing else changes, so a session can be developed in dev mode and switched to enforced mode once
@@ -159,12 +161,15 @@ it in mind:
 - Enrollment happens through a local web page that calls `navigator.credentials.create` with user
   verification required. The registry entry gets `alg: ES256-webauthn`, the credential's public
   key, the authenticator's AAGUID and whatever attestation the authenticator returned.
+
 - `attestation_verified` becomes true only when the attestation format could be checked against a
   vendor root. Apple platform passkeys often return no attestation, in which case the AAGUID is
   self-reported and the field stays false.
+
 - Signing places the SHA-256 of the signing input in the WebAuthn challenge. The verifier
   recomputes it, checks the origin and RP ID, requires the user-verification flag and verifies the
   ES256 signature with the enrolled key.
+
 - The user-verification flag covers PIN and password as well as biometrics, so "biometric" is
   enforced by an allowlist of biometric-capable authenticators rather than proven by the
   signature. That limit is documented rather than hidden.
