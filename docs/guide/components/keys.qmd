@@ -53,7 +53,7 @@ Enrollment records a public key under a signer id. The usual path creates and en
 
 ```bash
 # Create a dev key and enroll it for alice
-sib keygen --kid "alice@example.com#dev-2026-09" --enroll --signer alice@example.com
+sib keygen --signer alice@example.com --enroll
 ```
 
 ```text

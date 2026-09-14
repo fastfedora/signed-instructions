@@ -13,7 +13,7 @@ Choose a directory for keys and the registry, then create and enroll a key for t
 
 ```bash
 export SIB_HOME=$PWD/.sib-local
-uv run sib keygen --kid "alice@example.com#dev-2026-09" --enroll --signer alice@example.com
+uv run sib keygen --signer alice@example.com --enroll
 ```
 
 The key is written under `$SIB_HOME/dev-keys/` and its public half is enrolled in
@@ -28,7 +28,7 @@ canonical text and the terms it is about to sign:
 
 ```bash
 printf 'You may deploy the current main branch to staging with\nscripts/deploy.sh staging whenever the test suite passes.\n' \
-  | uv run sib sign --signer alice@example.com --kid "alice@example.com#dev-2026-09" \
+  | uv run sib sign --signer alice@example.com \
       --expires 8h --audience acme/dev-agent --file - --out block.txt
 ```
 

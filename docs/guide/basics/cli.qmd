@@ -17,10 +17,10 @@ Inside the repository, run it as `uv run sib`. After `source .venv/bin/activate`
 
 ```bash
 # Create a dev key and enroll it for a signer
-sib keygen --kid "alice@example.com#dev-2026-09" --enroll --signer alice@example.com
+sib keygen --signer alice@example.com --enroll
 
 # Sign an instruction from a file, writing the block to stdout
-sib sign --signer alice@example.com --kid "alice@example.com#dev-2026-09" --expires 2h \
+sib sign --signer alice@example.com --expires 2h \
   --audience acme/dev-agent --file instruction.txt
 
 # Verify every block in a file for a given audience
@@ -35,16 +35,18 @@ sib inspect CLAUDE.md
 
 ### keygen
 
-Create a dev-mode Ed25519 key under `$SIB_HOME/dev-keys/` and optionally enroll it.
+Create a dev-mode Ed25519 key under `$SIB_HOME/dev-keys/` and optionally enroll it. Give
+`--signer`, `--kid`, or both.
+
+`--signer ID`
+: The signer the key belongs to. When `--kid` is omitted the key identifier is derived as
+  `<signer>#dev-<year>-<month>` (e.g., `alice@example.com#dev-2026-09`).
 
 `--kid ID`
-: Key identifier, by convention `signer#label` (e.g., `alice@example.com#dev-2026-09`). Required.
+: Key identifier, by convention `signer#label`. Overrides the derived name.
 
 `--enroll`
 : Also add the public key to the registry. Requires `--signer`.
-
-`--signer ID`
-: The signer to enroll the key for.
 
 `--dev`
 : Accepted for clarity; dev mode is the only mode `keygen` supports.
@@ -73,11 +75,16 @@ Add an existing public key to the registry, for keys created elsewhere.
 Clearsign an instruction. The command prints the canonical text and the terms before signing, so
 what you see is what you sign.
 
+Either identifier is enough: a `--kid` names its signer through the registry, and a `--signer`
+with exactly one enrolled key names that key. With several keys, the command lists them and asks
+for `--kid`.
+
 `--signer ID`
-: The signer, written to the `iss` header field. Required.
+: The signer, written to the `iss` header field. Derived from `--kid` when omitted; checked for
+  agreement when both are given.
 
 `--kid ID`
-: The key to sign with; must be enrolled for the signer. Required.
+: The key to sign with. Derived from `--signer` when the signer has one enrolled key.
 
 `--expires DURATION`
 : Validity window from now, as `30m`, `2h` or `1d` (default: `2h`).

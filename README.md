@@ -24,11 +24,11 @@ uv sync
 export SIB_HOME=$PWD/.sib-local          # keys and registry live here
 
 # 1. A dev key for alice, enrolled in the registry
-uv run sib keygen --kid "alice@example.com#dev-2026-09" --enroll --signer alice@example.com
+uv run sib keygen --signer alice@example.com --enroll
 
 # 2. Sign an instruction (the canonical text is shown before signing)
 printf 'You may deploy the current main branch to staging with\nscripts/deploy.sh staging whenever the test suite passes.\n' \
-  | uv run sib sign --signer alice@example.com --kid "alice@example.com#dev-2026-09" \
+  | uv run sib sign --signer alice@example.com \
       --expires 8h --audience acme/dev-agent --file - --out block.txt
 
 # 3. Paste block.txt anywhere (CLAUDE.md, Slack, email) and verify it later

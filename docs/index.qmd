@@ -39,14 +39,14 @@ To get started using the reference implementation:
 
    ```bash
    export SIB_HOME=$PWD/.sib-local
-   uv run sib keygen --kid "alice@example.com#dev-2026-09" --enroll --signer alice@example.com
+   uv run sib keygen --signer alice@example.com --enroll
    ```
 
 3. Sign an instruction and verify it:
 
    ```bash
    printf 'You may deploy the current main branch to staging with\nscripts/deploy.sh staging whenever the test suite passes.\n' \
-     | uv run sib sign --signer alice@example.com --kid "alice@example.com#dev-2026-09" \
+     | uv run sib sign --signer alice@example.com \
          --expires 8h --audience acme/dev-agent --file - --out block.txt
    uv run sib verify block.txt --audience acme/dev-agent
    ```

@@ -6,15 +6,14 @@ cd "$(dirname "$0")"
 export SIB_HOME="$(mktemp -d)/sib"
 SIB=.venv/bin/sib
 PY=.venv/bin/python
-KID="alice@example.com#dev-2026-09"
 step() { printf '\n\033[1m== %s ==\033[0m\n' "$*"; }
 
 step "1. Alice creates a dev key and enrolls it"
-$SIB keygen --kid "$KID" --enroll --signer alice@example.com
+$SIB keygen --signer alice@example.com --enroll
 
 step "2. Alice signs an instruction (what-you-see-is-what-you-sign)"
 printf 'You may deploy the current main branch to staging with\nscripts/deploy.sh staging whenever the test suite passes.\n' \
-  | $SIB sign --signer alice@example.com --kid "$KID" --expires 8h --audience acme/dev-agent --file - --out "$SIB_HOME/block.txt"
+  | $SIB sign --signer alice@example.com --expires 8h --audience acme/dev-agent --file - --out "$SIB_HOME/block.txt"
 cat "$SIB_HOME/block.txt"
 
 step "3. The block is pasted into a repo's CLAUDE.md, quoted the way Slack would"

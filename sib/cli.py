@@ -28,14 +28,42 @@ def parse_duration(s: str) -> dt.timedelta:
     return dt.timedelta(**{{"s": "seconds", "m": "minutes", "h": "hours", "d": "days"}[unit]: n})
 
 
+def default_kid(signer: str) -> str:
+    """Convention: signer#dev-<year>-<month>."""
+    return f"{signer}#dev-{dt.datetime.now(dt.timezone.utc).strftime('%Y-%m')}"
+
+
+def resolve_signer_and_kid(reg: Registry, signer: str | None, kid: str | None) -> tuple[str, str]:
+    """Either identifier is enough. A kid names its signer through the registry;
+    a signer with exactly one enrolled key names that key."""
+    if kid:
+        found = reg.lookup(kid)
+        if found is None:
+            raise SystemExit(f"kid {kid!r} is not enrolled; run `sib keygen --enroll` or `sib enroll` first")
+        if signer and found[0] != signer:
+            raise SystemExit(f"kid {kid!r} is enrolled for {found[0]!r}, not {signer!r}")
+        return found[0], kid
+    if not signer:
+        raise SystemExit("give --kid or --signer")
+    keys = [k for k in reg.signers.get(signer, []) if not k.get("revoked")]
+    if not keys:
+        raise SystemExit(f"no enrolled key for {signer!r}; run `sib keygen --signer {signer} --enroll` first")
+    if len(keys) > 1:
+        raise SystemExit(f"{signer!r} has several keys; choose one with --kid: " + ", ".join(k["kid"] for k in keys))
+    return signer, keys[0]["kid"]
+
+
 def cmd_keygen(a):
-    pub = keys_dev.generate(a.kid)
-    print(f"dev key created for kid {a.kid}\npublic key: {pub}")
+    if not a.kid and not a.signer:
+        raise SystemExit("give --signer (the kid is derived) or --kid")
+    kid = a.kid or default_kid(a.signer)
+    pub = keys_dev.generate(kid)
+    print(f"dev key created for kid {kid}\npublic key: {pub}")
     if a.enroll:
         reg = Registry()
-        reg.add_key(a.signer, a.kid, "EdDSA", pub, mode="dev")
+        reg.add_key(a.signer, kid, "EdDSA", pub, mode="dev")
         reg.save()
-        print(f"enrolled {a.kid} for {a.signer} in {reg.path} (dev mode, attestation_verified=false)")
+        print(f"enrolled {kid} for {a.signer} in {reg.path} (dev mode, attestation_verified=false)")
 
 
 def cmd_enroll(a):
@@ -55,19 +83,17 @@ def cmd_sign(a):
     now = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
     exp = now + parse_duration(a.expires)
     reg = Registry()
-    found = reg.lookup(a.kid)
-    if found is None or found[0] != a.signer:
-        raise SystemExit(f"kid {a.kid!r} is not enrolled for {a.signer!r}; run `sib keygen --enroll` first")
+    signer, kid = resolve_signer_and_kid(reg, a.signer, a.kid)
     ctext = canonicalize(a.canon, text)
-    h = Header(alg="EdDSA", kid=a.kid, canon=a.canon, iss=a.signer, iat=format_time(now), exp=format_time(exp),
+    h = Header(alg="EdDSA", kid=kid, canon=a.canon, iss=signer, iat=format_time(now), exp=format_time(exp),
                jti=b64u_encode(secrets.token_bytes(12)), mode="dev", aud=a.audience)
     hb = h.encode()
     # What-you-see-is-what-you-sign: show the exact canonical text and terms before signing.
     print("About to sign (canonical form):", file=sys.stderr)
     print("  " + ctext, file=sys.stderr)
-    print(f"  signer={a.signer} kid={a.kid} expires={h.exp} audience={a.audience or 'any'} canon={a.canon} mode=dev",
+    print(f"  signer={signer} kid={kid} expires={h.exp} audience={a.audience or 'any'} canon={a.canon} mode=dev",
           file=sys.stderr)
-    sig = keys_dev.sign(a.kid, signing_input(hb, ctext))
+    sig = keys_dev.sign(kid, signing_input(hb, ctext))
     block = render(text, f"{hb}..{sig}", clear_lines(h))
     if a.out:
         Path(a.out).write_text(block + "\n")
@@ -124,14 +150,18 @@ def cmd_inspect(a):
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="sib", description="Signed Instruction Blocks (dev mode)")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    k = sub.add_parser("keygen", help="create a dev-mode Ed25519 key"); k.add_argument("--kid", required=True)
+    k = sub.add_parser("keygen", help="create a dev-mode Ed25519 key")
+    k.add_argument("--signer", help="signer id; the kid defaults to <signer>#dev-<year>-<month>")
+    k.add_argument("--kid", help="key identifier (default: derived from --signer)")
     k.add_argument("--dev", action="store_true", default=True); k.add_argument("--enroll", action="store_true")
-    k.add_argument("--signer", help="signer id to enroll the key for (with --enroll)"); k.set_defaults(fn=cmd_keygen)
+    k.set_defaults(fn=cmd_keygen)
     e = sub.add_parser("enroll", help="add a public key to the registry"); e.add_argument("--signer", required=True)
     e.add_argument("--kid", required=True); e.add_argument("--public-key", required=True)
     e.add_argument("--alg", default="EdDSA"); e.add_argument("--dev", action="store_true"); e.set_defaults(fn=cmd_enroll)
-    s = sub.add_parser("sign", help="clearsign an instruction"); s.add_argument("--signer", required=True)
-    s.add_argument("--kid", required=True); s.add_argument("--expires", default="2h"); s.add_argument("--audience")
+    s = sub.add_parser("sign", help="clearsign an instruction; give --kid, or --signer when they hold one key")
+    s.add_argument("--signer", help="signer id (derived from --kid through the registry when omitted)")
+    s.add_argument("--kid", help="key identifier (derived from --signer when the signer has one enrolled key)")
+    s.add_argument("--expires", default="2h"); s.add_argument("--audience")
     s.add_argument("--canon", default="text/1"); s.add_argument("--file", help="file to sign, or - for stdin")
     s.add_argument("--out"); s.set_defaults(fn=cmd_sign)
     v = sub.add_parser("verify", help="verify every block in a file"); v.add_argument("file")
