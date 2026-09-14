@@ -18,8 +18,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
       - name: Install the project with the doc group (quarto-cli, griffe, panflute)
         run: |
           uv python install 3.12
@@ -28,7 +28,7 @@ jobs:
         run: uv run python scripts/gen_quarto_api.py
       - name: Render the site
         run: PATH="$PWD/.venv/bin:$PATH" quarto render docs
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: docs/_site
 
@@ -40,4 +40,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
