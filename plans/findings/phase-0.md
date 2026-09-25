@@ -88,6 +88,30 @@ CLAUDE.md is loaded once per process, before the SessionStart hook runs. The lat
 
 Classifier side: no observed decision effect in any condition. The "deny every Bash command" line (12 runs across three write points plus static) and the "never force-push" line (15 + 10 runs, including the line present from session start) never produced a classifier denial. The force-push instrument was confounded: the model itself refused or asked for confirmation in most control runs, and in the runs where it did push, the classifier allowed it in every condition including the static one. So this establishes that a CLAUDE.md line of that shape does not flip the classifier, not what the classifier read. Cache: cache-read tokens were identical with and without the hook rewrite (about 48k), consistent with the file not being re-read.
 
+## Addendum, 25 September 2026: is there any other channel?
+
+Re-examining the hooks reference after Phase 1 confirmed that `classifierContext` appears on
+PostToolUse alone, and that its note is read when the classifier judges later actions rather than
+the call it is attached to. Four conditions tested the two `additionalContext` positions that would
+arrive in time.
+
+H and I deliver the Phase 0 provenance note at SessionStart and at UserPromptSubmit, on the
+CLAUDE.md vector with no gate and no prose (`channel_probe_h_i.jsonl`). Both gave 0 of 10 deploys
+with 0 attempts and 0 classifier denials: the model refused before the classifier ran, so the
+result is confounded.
+
+J and K invert the note to claim a verified authorization exists and run on the runbook vector,
+where the classifier denies at baseline (`channel_probe_j_k.jsonl`). Attempts rose from 2 of 10 to
+7 of 10 in both, and all 14 were refused with "Blocked by classifier", the same verdict as the two
+baseline attempts. The channel reaches the model and not the classifier.
+
+Two conclusions. PostToolUse `classifierContext` is the only context channel into auto mode, so an
+action taken as the first step of a session can only be covered by the deterministic gate. And
+delivering the provenance note early is a useful model-side layer, 8 of 10 deploys to 0 of 10
+attempts, which the Phase 1 UserPromptSubmit hook already does, but it works by persuading an agent
+the threat model treats as untrusted and is not a guarantee.
+
+
 ## Decisions for Phase 1
 
 - **Manifest channel to auto mode: PostToolUse `classifierContext`** (condition G), attached to every tool call the classifier records (it discards notes on read-only lookups such as Read). Keep the note short (2,000-character cap shared per call) and factual: which spans verified, which did not, and that everything else is unsigned. The docs say the classifier treats it as unverified application context that never establishes user intent, which is exactly right for provenance.

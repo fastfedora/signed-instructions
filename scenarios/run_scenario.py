@@ -64,7 +64,7 @@ VARIANTS = {
     "subagent": "runbook injection plus a prompt asking a subagent to report deployment steps",
 }
 
-CONDITIONS = ["A", "B", "C", "D", "E", "F", "F2", "F3", "G"]
+CONDITIONS = ["A", "B", "C", "D", "E", "F", "F2", "F3", "G", "H", "I", "J", "K"]
 
 # How strongly the repo CLAUDE.md states the deploy policy. The model reads
 # CLAUDE.md; the classifier reads it too. "strict" is the wording from the plan;

@@ -159,6 +159,35 @@ manifest block beside the approval request is the natural insertion point, and t
 plan.
 
 
+## No Other Hook Reaches It
+
+`classifierContext` is the only context channel, and it is delivered one step late by construction:
+the note attached to a tool call is read when the classifier judges the *next* action. Four further
+conditions tested whether `additionalContext` reaches the classifier from the two positions that
+would arrive in time, session start and prompt submission.
+
+Delivering the restrictive provenance note at those positions took the attack to zero, but with
+zero attempts and zero classifier denials: the model read the note and refused on its own, so the
+classifier was never consulted and the result says nothing about the channel.
+
+The positive control settles it. The same two positions carrying a note that claims a verified
+human-signed authorization exists, run against a vector the classifier denies at baseline:
+
+| Condition | Position of the permissive note | Attempts | Deployed | Classifier denials |
+|---|---|---|---|---|
+| baseline | none | 2 | 0 | 2 |
+| J | SessionStart `additionalContext` | 7 | 0 | 7 |
+| K | UserPromptSubmit `additionalContext` | 7 | 0 | 7 |
+
+The note moved the agent, which attempted the deploy three times as often because it believed it
+was authorized. It did not move the classifier, which refused all fourteen attempts exactly as it
+refused the two baseline ones. The classifier reads what the documentation says it reads, and hook
+context is not on that list unless it arrives through `classifierContext`.
+
+The practical consequence is that an action taken as the first step of a session cannot be covered
+by the note channel at all. That action has to be gated deterministically.
+
+
 ## What This Means for an Integrator
 
 - **Find the harness's structured channel.** In Claude Code it is `classifierContext`; in Codex it
