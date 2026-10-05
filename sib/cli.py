@@ -95,7 +95,7 @@ def cmd_enroll(a):
     existing = [k["credential_id"] for k in reg.signers.get(a.signer, []) if k.get("credential_id")]
     try:
         entry = enroll_in_browser(a.signer, existing, reg.allowed_aaguids(), timeout=a.timeout,
-                                  open_browser=not a.no_browser)
+                                  open_browser=not a.no_browser, browser=a.browser)
     except BrowserFlowError as e:
         raise SystemExit(f"enrollment failed: {e}")
     kid = a.kid or passkey_kid(a.signer, entry["credential_id"])
@@ -151,7 +151,8 @@ def cmd_sign(a):
         from .webauthn_app import sign_in_browser, BrowserFlowError
         t0 = time.time()
         try:
-            res = sign_in_browser(h, ctext, key, reg.allowed_aaguids(), timeout=a.timeout, open_browser=not a.no_browser)
+            res = sign_in_browser(h, ctext, key, reg.allowed_aaguids(), timeout=a.timeout,
+                                  open_browser=not a.no_browser, browser=a.browser)
         except BrowserFlowError as e:
             raise SystemExit(f"signing failed: {e}")
         if res["status"] != "verified":
@@ -229,6 +230,8 @@ def main(argv=None):
     e.add_argument("--alg", default="EdDSA", help="algorithm of --public-key"); e.add_argument("--dev", action="store_true")
     e.add_argument("--timeout", type=float, default=180, help="seconds to wait for the browser")
     e.add_argument("--no-browser", action="store_true", help="print the page URL instead of opening a browser")
+    e.add_argument("--browser", help="browser to open the page in (default: SIB_BROWSER, else the system default): "
+                   "a name such as safari, chrome or firefox, or a command such as 'open -a Safari'")
     e.set_defaults(fn=cmd_enroll)
     s = sub.add_parser("sign", help="clearsign an instruction; give --kid, or --signer when they hold one key")
     s.add_argument("--signer", help="signer id (derived from --kid through the registry when omitted)")
@@ -241,6 +244,7 @@ def main(argv=None):
     s.add_argument("--dev", action="store_true", help="sign with a dev key even when a passkey is enrolled")
     s.add_argument("--timeout", type=float, default=180, help="seconds to wait for the browser")
     s.add_argument("--no-browser", action="store_true", help="print the page URL instead of opening a browser")
+    s.add_argument("--browser", help="as for enroll")
     s.set_defaults(fn=cmd_sign)
     v = sub.add_parser("verify", help="verify every block in a file"); v.add_argument("file")
     v.add_argument("--audience"); v.add_argument("--json", action="store_true")

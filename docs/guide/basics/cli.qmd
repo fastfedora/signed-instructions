@@ -86,6 +86,12 @@ authenticator; see [Biometric Signing](../components/signing.qmd#enrollment).
 `--no-browser`
 : Print the page URL instead of opening a browser.
 
+`--browser NAME`
+: The browser to open the page in, when the system default lacks passkey support or a password
+  manager in it captures the prompt: a name the Python `webbrowser` module knows (`safari`,
+  `chrome`, `firefox`) or a command the URL is appended to (`'open -a Safari'`). Defaults to
+  `SIB_BROWSER`, then the system default.
+
 ### sign
 
 Clearsign an instruction. The command prints the canonical text and the terms before signing, so
@@ -125,7 +131,7 @@ keys; with several candidates, the command lists them and asks for `--kid`.
 `--dev`
 : Sign with a dev key even when a passkey is enrolled; refuses a `--kid` that is not a dev key.
 
-`--timeout SECONDS`, `--no-browser`
+`--timeout SECONDS`, `--no-browser`, `--browser NAME`
 : As for `enroll`.
 
 ### verify
@@ -174,5 +180,5 @@ usage error, such as signing with a key that is not enrolled for the signer.
 `SIB_MODE`
 : `dev` or `enforced`; overrides the default described under `verify`.
 
-`SIB_WEBAUTHN_PORT`, `SIB_REQUIRE_ATTESTATION`, `SIB_ATTESTATION_ROOTS`
+`SIB_BROWSER`, `SIB_WEBAUTHN_PORT`, `SIB_REQUIRE_ATTESTATION`, `SIB_ATTESTATION_ROOTS`
 : Passkey enrollment and signing; see [Biometric Signing](../components/signing.qmd#environment).

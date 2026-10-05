@@ -260,6 +260,14 @@ is not on the built-in list.
 
 ## Environment
 
+`SIB_BROWSER`
+: The browser to open the enroll and sign pages in: a name the Python `webbrowser` module knows
+  (`safari`, `chrome`, `firefox`) or a command the URL is appended to (`open -a Safari`). Unset,
+  the system default browser opens the page. `--browser` on `sib enroll` and `sib sign` overrides
+  it for one command. Use it when the default browser has no passkey support, or when a password
+  manager's extension captures the passkey prompt (1Password, for instance, creates the passkey in
+  its own vault, which is not on the biometric-capable allowlist).
+
 `SIB_WEBAUTHN_PORT`
 : The port of the local app (default `7391`). The origin `http://localhost:<port>` is recorded
   in the registry at enrollment, so a key enrolled on one port verifies assertions from that port
