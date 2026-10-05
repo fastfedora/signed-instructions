@@ -2,10 +2,11 @@
 title: Keys and Registry
 ---
 
-A signature is only as meaningful as the binding between a key and a person. In Phase 1 that
-binding is a software key and a flat file: enough to exercise every other part of the design, and
-clearly labelled as not proving who signed. This page covers where keys live, what the registry
-records and what changes when biometric signing arrives.
+A signature is only as meaningful as the binding between a key and a person. Two kinds of key
+exist: a dev-mode software key, enough to build and test every other part of the design and
+clearly labelled as not proving who signed, and a passkey, which signs only after the signer's
+authenticator has verified them. This page covers where keys live, what the registry records and
+how the two modes differ. [Biometric Signing](signing.qmd) covers passkeys in depth.
 
 
 ## Dev-Mode Keys
@@ -32,6 +33,15 @@ outright.
 :::
 
 
+## Passkeys
+
+`sib enroll --signer alice@example.com` creates a passkey in the signer's authenticator through
+the browser and records its public key in the registry with `alg: ES256-webauthn`. The private
+key never leaves the authenticator, and every signature requires the authenticator to verify the
+user first. What enrollment records, and what it does and does not prove, is on
+[Biometric Signing](signing.qmd).
+
+
 ## Key Identifiers
 
 A key id (`kid`) names one enrolled key and appears in every block signed with it. The convention
@@ -39,17 +49,18 @@ is the signer id, a `#`, and a label:
 
 ```text
 alice@example.com#dev-2026-09
-alice@example.com#passkey-7c1e
+alice@example.com#passkey-9188
 ```
 
 The label distinguishes a person's keys from each other, so a dev key and a passkey can coexist and
-either can be rotated. The verifier does not parse the label; it looks the whole `kid` up in the
-registry and checks that the registry's signer matches the header's `iss`.
+either can be rotated. `keygen` derives `dev-<year>-<month>`; `enroll` derives `passkey-` plus the
+first two bytes of the credential id. The verifier does not parse the label; it looks the whole
+`kid` up in the registry and checks that the registry's signer matches the header's `iss`.
 
 
 ## Enrollment
 
-Enrollment records a public key under a signer id. The usual path creates and enrolls in one step:
+Enrollment records a public key under a signer id. For a dev key, create and enroll in one step:
 
 ```bash
 # Create a dev key and enroll it for alice
@@ -63,23 +74,23 @@ public key: JmbApRbWb-3nVyk_H9vMHMId6bSA_znZfS2_aRnu5Hc
 enrolled alice@example.com#dev-2026-09 for alice@example.com in /tmp/sib-doc-blocks/registry.json (dev mode, attestation_verified=false)
 ```
 
-To enroll a public key produced elsewhere, use `sib enroll`:
+For a passkey, `sib enroll --signer alice@example.com` opens the enroll page. To enroll a public
+key produced elsewhere, give it on the command line:
 
 `--signer ID`
 : The signer's stable identifier (e.g., an email address).
 
 `--kid KID`
-: The key id, following the convention above.
+: The key id, following the convention above. Required with `--public-key`.
 
 `--public-key KEY`
 : The raw public key, base64url without padding.
 
 `--alg ALG`
-: The signature algorithm (default: `EdDSA`).
+: The signature algorithm of `--public-key` (default: `EdDSA`).
 
 `--dev`
-: Mark the key as a dev key. Without it the key is enrolled in enforced mode, which in Phase 1 no
-  signing path can use.
+: Mark the key as a dev key. Without it the key is enrolled in enforced mode.
 
 Enrolling a `kid` that already exists is an error; a key is never silently replaced.
 
@@ -103,17 +114,38 @@ The registry is one JSON file at `$SIB_HOME/registry.json`:
           "attestation_verified": false,
           "attestation": {},
           "revoked": false
+        },
+        {
+          "kid": "alice@example.com#passkey-9188",
+          "alg": "ES256-webauthn",
+          "public_key": "pQECAyYgASFYIAme6lzACHBimeQ_-XoqnWCJGkWnolTu63bWExx4t1mZIlggf_dOOJAncBQ8B9jE1koWCovF_qJejGQv_fBEm2QL1oY",
+          "mode": "enforced",
+          "enrolled_at": "2026-10-05T11:45:20Z",
+          "attestation_verified": false,
+          "attestation": {"format": "packed", "x5c_present": true, "roots": null},
+          "revoked": false,
+          "credential_id": "kYjC6VVDjNGdsK9jHcPPariB-AUWC8KDxWLVH-Vp9p4",
+          "aaguid": "01020304-0506-0708-0102-030405060708",
+          "sign_count": 1,
+          "origins": ["http://localhost:7391"],
+          "rp_id": "localhost",
+          "user_verified_at_enrollment": true,
+          "transports": ["internal"]
         }
       ]
     }
-  ]
+  ],
+  "allowed_aaguids": {
+    "01020304-0506-0708-0102-030405060708": "Chromium virtual authenticator (e2e)"
+  }
 }
 ```
 
 Each key carries:
 
 `alg`, `public_key`
-: What the verifier needs to check a signature. The verifier also requires the header's `alg` to
+: What the verifier needs to check a signature: a raw Ed25519 key for `EdDSA`, a COSE-encoded
+  P-256 key for `ES256-webauthn`, both base64url. The verifier also requires the header's `alg` to
   match this entry.
 
 `mode`
@@ -124,12 +156,19 @@ Each key carries:
 : When the entry was made, RFC 3339 in UTC.
 
 `attestation_verified`, `attestation`
-: Whether the enrollment carried attestation that the verifier checked, and what it said. Always
-  false and empty for dev keys. This is the field that will separate "hardware backing verified"
-  from "hardware backing assumed" once biometric keys exist.
+: Whether the enrollment carried attestation that chained to a known root, and what the
+  statement contained. Always false and empty for dev keys. This is the field that separates
+  "hardware backing verified" from "hardware backing assumed".
 
 `revoked`
 : Honored by the verifier (status `revoked`), but no command sets it yet.
+
+`credential_id`, `aaguid`, `sign_count`, `origins`, `rp_id`, `transports`
+: The WebAuthn enrollment record; see [What the Registry
+  Attests](signing.qmd#what-the-registry-attests).
+
+The optional top-level `allowed_aaguids` adds authenticator models to the built-in
+biometric-capable allowlist, as `"<aaguid>": "<label>"`.
 
 The registry is the stand-in for the external directory that maps signer keys to people, which the
 project treats as out of scope. It is a flat file so that it stays easy to inspect and to ship with
@@ -138,8 +177,9 @@ a demo; it is not access-controlled beyond file permissions.
 
 ## Dev Mode and Enforced Mode
 
-The verifier's mode comes from the harness (`SIB_MODE`, default `dev` in Phase 1) and is recorded
-in every manifest. The two modes differ in three places:
+The verifier's mode comes from the harness. `SIB_MODE` sets it; when the variable is unset the
+mode is `enforced` once any passkey is enrolled in the registry and `dev` before that. The mode is
+recorded in every manifest. The two modes differ in three places:
 
 - **Dev keys**: accepted in dev mode, refused in enforced mode.
 
@@ -148,30 +188,5 @@ in every manifest. The two modes differ in three places:
 
 - **Warnings**: dev mode prints its warning on every operation. Enforced mode is silent.
 
-Nothing else changes, so a session can be developed in dev mode and switched to enforced mode once
-a real key is enrolled.
-
-
-## What Phase 2 Changes
-
-Phase 2 replaces the dev key with a WebAuthn passkey (Touch ID on macOS first), as planned in
-`plans/phase-2-biometric-signing.md`. The plan is stated here so the registry format is read with
-it in mind:
-
-- Enrollment happens through a local web page that calls `navigator.credentials.create` with user
-  verification required. The registry entry gets `alg: ES256-webauthn`, the credential's public
-  key, the authenticator's AAGUID and whatever attestation the authenticator returned.
-
-- `attestation_verified` becomes true only when the attestation format could be checked against a
-  vendor root. Apple platform passkeys often return no attestation, in which case the AAGUID is
-  self-reported and the field stays false.
-
-- Signing places the SHA-256 of the signing input in the WebAuthn challenge. The verifier
-  recomputes it, checks the origin and RP ID, requires the user-verification flag and verifies the
-  ES256 signature with the enrolled key.
-
-- The user-verification flag covers PIN and password as well as biometrics, so "biometric" is
-  enforced by an allowlist of biometric-capable authenticators rather than proven by the
-  signature. That limit is documented rather than hidden.
-
-Until then, every block is a dev block, and every registry entry says so.
+Nothing else changes: a passkey-signed block runs every check of its path in either mode, so a
+session can be developed in dev mode and switched to enforced mode once a passkey is enrolled.

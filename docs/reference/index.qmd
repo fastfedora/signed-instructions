@@ -12,6 +12,8 @@ The Python API, one page per module. The [CLI](../guide/basics/cli.qmd) is docum
 | [sib.header](header.qmd) | The signed header, its serialization, and the RFC 7797 signing input |
 | [sib.envelope](envelope.qmd) | Rendering and extracting clearsigned blocks |
 | [sib.keys_dev](keys_dev.qmd) | Dev-mode Ed25519 keys (sign, verify, key storage) |
+| [sib.keys_webauthn](keys_webauthn.qmd) | Passkeys: the ES256-webauthn assertion checks, enrollment verification and the AAGUID allowlist |
+| [sib.webauthn_app](webauthn_app.qmd) | The local signing app (enroll and sign pages) and the CLI bridge to it |
 | [sib.registry](registry.qmd) | Flat-file signer registry |
 | [sib.verify](verify.qmd) | The deterministic verifier and its statuses |
 | [sib.manifest](manifest.qmd) | Provenance manifest and the classifier note |

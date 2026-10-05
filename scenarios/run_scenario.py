@@ -146,9 +146,19 @@ def build_sib_settings(layers=("prompt", "pre", "post", "prose")):
     return {"hooks": hooks, "autoMode": auto}
 
 
+# Phase 2 (enforced mode): --sib-home copies a SIB_HOME holding a passkey registry
+# into every run instead of enrolling a dev key, and --signed-block supplies a block
+# the human signed once (Touch ID) instead of signing per run.
+SIB_HOME_TEMPLATE = None
+SIGNED_BLOCK = None
+
+
 def make_sib_home(run_dir):
-    """Per-run SIB_HOME with alice's dev key enrolled. Returns the path."""
+    """Per-run SIB_HOME: a copy of --sib-home when given, else alice's dev key enrolled. Returns the path."""
     home = run_dir / "sib-home"
+    if SIB_HOME_TEMPLATE:
+        shutil.copytree(SIB_HOME_TEMPLATE, home, ignore=shutil.ignore_patterns("sessions"))
+        return home
     env = {**os.environ, "SIB_HOME": str(home)}
     subprocess.run([str(SIB_CLI), "keygen", "--kid", ALICE_KID, "--enroll", "--signer", ALICE],
                    env=env, check=True, capture_output=True)
@@ -156,6 +166,8 @@ def make_sib_home(run_dir):
 
 
 def sign_instruction(home, text, expires="6h", audience="acme/dev-agent"):
+    if SIGNED_BLOCK:
+        return Path(SIGNED_BLOCK).read_text().rstrip("\n")
     env = {**os.environ, "SIB_HOME": str(home)}
     p = subprocess.run([str(SIB_CLI), "sign", "--signer", ALICE, "--kid", ALICE_KID, "--expires", expires,
                         "--audience", audience, "--file", "-"], input=text, env=env, check=True,
@@ -601,6 +613,8 @@ def main():
                     help="skip/wait when the subscription's five-hour utilization is at or above this percent")
     ap.add_argument("--max-budget", type=float, default=3.0, help="per-run --max-budget-usd")
     ap.add_argument("--timeout", type=int, default=900, help="per-run wall timeout, seconds")
+    ap.add_argument("--sib-home", help="SIB_HOME holding a passkey registry, copied into every run (enforced mode)")
+    ap.add_argument("--signed-block", metavar="FILE", help="a block signed by a human once, used instead of signing per run")
     ap.add_argument("--results", default=str(RESULTS_DIR / "results.jsonl"))
     ap.add_argument("--summarize", metavar="FILE", help="print a summary table for FILE and exit")
     ap.add_argument("--reevaluate", metavar="FILE", help="recompute every row of FILE from its run directory, then summarize")
@@ -622,6 +636,15 @@ def main():
         summarize(args.reevaluate)
         return
 
+    global SIB_HOME_TEMPLATE, SIGNED_BLOCK
+    if args.sib_home:
+        SIB_HOME_TEMPLATE = Path(args.sib_home).expanduser().resolve()
+        if not (SIB_HOME_TEMPLATE / "registry.json").exists():
+            sys.exit(f"--sib-home {args.sib_home}: no registry.json there")
+    if args.signed_block:
+        SIGNED_BLOCK = Path(args.signed_block).expanduser().resolve()
+        if "BEGIN SIB SIGNED INSTRUCTION" not in SIGNED_BLOCK.read_text():
+            sys.exit(f"--signed-block {args.signed_block}: not a signed instruction block")
     conditions = [c.strip() for c in args.condition.split(",")]
     variants = [v.strip() for v in args.variant.split(",")]
     for c in conditions:

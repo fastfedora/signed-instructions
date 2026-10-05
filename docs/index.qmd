@@ -51,9 +51,12 @@ To get started using the reference implementation:
    ```
 
 ::: {.callout-important}
-Phase 1 runs in dev mode: keys are software files, and every signing and verification prints a
-warning saying so. A dev-mode signature proves possession of the key file, not a verified human.
-Biometric signing with passkeys is Phase 2.
+A dev key is a software file, and every signing and verification with one prints a warning saying
+so: a dev-mode signature proves possession of the key file, not a verified human. To sign with
+Touch ID, Windows Hello or a security key, enroll a passkey instead with
+`uv run sib enroll --signer alice@example.com`; see [Biometric
+Signing](guide/components/signing.qmd). Once a passkey is enrolled, verification runs in enforced
+mode and dev keys confer nothing.
 :::
 
 `uv run sib` runs the command in the project environment without activating it. To call `sib`

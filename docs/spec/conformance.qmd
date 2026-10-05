@@ -14,7 +14,9 @@ Signer
 : Produces blocks that the reference verifier reports as `verified` with the signer's registry
   entry, for instructions under both `text/1` and `raw/1`, including instructions containing
   typographic quotes, non-breaking spaces and multiple lines. Shows the canonical instruction and
-  the header terms before signing. Emits a visible dev-mode warning for a software key.
+  the header terms before signing. Emits a visible dev-mode warning for a software key. For a
+  WebAuthn key, sets the challenge to the hash of the signing input and refuses to emit a block
+  whose assertion does not verify.
 
 Verifier
 : Produces the expected status for every vector below. Applies the steps of
@@ -46,9 +48,12 @@ holds:
 ```
 
 A verifier under test is given `block`, `registry` and `inputs`, with a nonce store that accepts
-everything, and MUST produce `expected_status`. Where `expected_text` is not null it MUST also
+everything, and MUST produce `expected_status`. `registry` MAY carry a top-level
+`allowed_aaguids` object, which extends the built-in biometric-capable allowlist for the vectors
+that use it. Where `expected_text` is not null it MUST also
 report that canonical text. The generator, `docs/spec/vectors/generate.py`, creates a fresh dev
-key on every run, so signatures differ between runs and statuses do not.
+key and a fresh software WebAuthn authenticator on every run, so signatures differ between runs
+and statuses do not.
 
 
 ## Vectors
@@ -69,6 +74,15 @@ key on every run, so signatures differ between runs and statuses do not.
 | `malformed_not_detached` | `malformed` | A payload segment is present; a block must be a detached JWS. |
 | `malformed_unknown_canon` | `malformed` | The header names a canonicalization rule the verifier does not know. |
 | `revoked` | `revoked` | The key is marked revoked in the registry. |
+| `webauthn_verified` | `verified` | Signed by a passkey: UV set, origin and RP ID enrolled, AAGUID allowlisted; verifier in enforced mode. |
+| `webauthn_verified_dev_mode` | `verified` | The same block with the verifier in dev mode. |
+| `webauthn_invalid_signature` | `invalid_signature` | One word changed after signing; the recomputed challenge no longer matches `clientDataJSON`. |
+| `webauthn_uv_not_performed` | `uv_not_performed` | The assertion's UV flag is clear. |
+| `webauthn_origin_not_allowed` | `origin_not_allowed` | `clientDataJSON.origin` is not enrolled for the key. |
+| `webauthn_rp_id_mismatch` | `rp_id_mismatch` | `rpIdHash` is not the SHA-256 of the enrolled RP ID. |
+| `webauthn_unknown_key_wrong_credential` | `unknown_key` | `credentialId` is not the credential enrolled under `kid`. |
+| `webauthn_authenticator_not_allowed` | `authenticator_not_allowed` | The registry's allowlist lacks the authenticator's AAGUID. |
+| `dev_block_with_passkey_enrolled` | `dev_key_in_enforced_mode` | A dev block with a passkey enrolled and the verifier in enforced mode. |
 
 `nonce_replayed` has no vector in Phase 1, because the reference nonce store accepts every block.
 A vector is added with the store in Phase 3.

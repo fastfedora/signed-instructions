@@ -138,16 +138,21 @@ scope is scheduled for Phase 3.
 
 WebAuthn's user-verification flag is set by a PIN or a password as readily as by a fingerprint, and
 macOS falls back to the login password after failed Touch ID attempts. No field in the assertion
-proves which method was used. Phase 2 enforces user verification on the enrolled key
-cryptographically and restricts enrollment to authenticator models known to be biometric-capable;
-biometric-only remains policy, not proof.
+proves which method was used. The verifier requires the UV flag on every assertion and accepts only
+authenticators whose AAGUID is on an allowlist of biometric-capable models; biometric-only remains
+policy, not proof, and the allowlist is only as strong as the attestation behind the AAGUID. The
+options beyond it, enterprise attestation or a Secure Enclave key with a biometry-only access
+control, are Phase 3 specification questions. Passkeys synced through iCloud Keychain also exist on
+every device signed in to the signer's account. See [Biometric
+Signing](../components/signing.qmd#what-user-verification-does-not-prove).
 
 ### Attestation `none` proves nothing about the hardware
 
 With attestation `none` or `self`, the authenticator model identifier is self-reported and the
 WebAuthn specification gives no provenance guarantee. Hardware backing is therefore an enrollment
-assumption unless the authenticator supplies verifiable attestation, which the registry records per
-key as `attestation_verified`.
+assumption unless the authenticator supplies attestation that chains to a known root, which the
+registry records per key as `attestation_verified` and the manifest reports on every span.
+`SIB_REQUIRE_ATTESTATION` refuses enrollments without it; the demo accepts them and says so.
 
 ### A hook `allow` may skip the classifier
 

@@ -16,7 +16,7 @@ from ...envelope import extract, Block
 from ...keys_dev import sib_home
 from ...manifest import build_manifest
 from ...nonce_store import NoopNonceStore
-from ...registry import Registry
+from ...registry import Registry, default_mode
 from ...verify import verify_block
 
 POLICY_FILENAME = ".sib-policy.json"
@@ -248,12 +248,14 @@ def gather_candidates(event: dict) -> list[tuple[Block, dict]]:
 # ---------- manifest ----------
 
 def assemble_manifest(event: dict, policy: dict) -> dict:
-    """Verifier error → manifest with zero verified spans and an error field (fail closed on authority)."""
-    mode = os.environ.get("SIB_MODE", "dev")
+    """Verifier error → manifest with zero verified spans and an error field (fail closed on authority).
+    The mode is SIB_MODE when set, else enforced once a WebAuthn key is enrolled (NF-4)."""
+    mode = os.environ.get("SIB_MODE") or "dev"
     audience = policy.get("audience")
     session_id, tool_use_id = event.get("session_id"), event.get("tool_use_id")
     try:
         registry = Registry()
+        mode = default_mode(registry)
         cands = gather_candidates(event)
         now = dt.datetime.now(dt.timezone.utc)
         spans = [(verify_block(b, now, audience, registry, NoopNonceStore(), session_id, mode), o) for b, o in cands]

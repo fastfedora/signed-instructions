@@ -1,5 +1,5 @@
 """Dev-mode software keys (Ed25519). Clearly labelled; confer nothing in
-enforced mode. Real signing keys arrive with WebAuthn in Phase 2."""
+enforced mode. The real signing keys are passkeys (`keys_webauthn`)."""
 from __future__ import annotations
 
 import os

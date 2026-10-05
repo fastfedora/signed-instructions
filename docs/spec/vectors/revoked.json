@@ -1,7 +1,7 @@
 {
   "name": "revoked",
   "note": "The key is marked revoked in the registry.",
-  "block": "-----BEGIN SIB SIGNED INSTRUCTION-----\nYou may deploy the current main branch to staging with\nscripts/deploy.sh staging whenever the test suite passes.\n-----BEGIN SIB SIGNATURE-----\nSigner: alice@example.com\nExpires: 2026-09-13T20:00:00Z\nAudience: acme/dev-agent\n\neyJhbGciOiJFZERTQSIsImF1ZCI6ImFjbWUvZGV2LWFnZW50IiwiYjY0IjpmYWxz\nZSwiY2Fub24iOiJ0ZXh0LzEiLCJjcml0IjpbImI2NCJdLCJleHAiOiIyMDI2LTA5\nLTEzVDIwOjAwOjAwWiIsImlhdCI6IjIwMjYtMDktMTNUMTE6NTU6MDBaIiwiaXNz\nIjoiYWxpY2VAZXhhbXBsZS5jb20iLCJqdGkiOiI1Q0dTWjY0TDJmYnBJYVRtIiwi\na2lkIjoiYWxpY2VAZXhhbXBsZS5jb20jZGV2LTIwMjYtMDkiLCJtb2RlIjoiZGV2\nIiwidHlwIjoiU0lCLzEifQ..gj6L6Rv4K_KlUv5REbGfpz1CkhUYKwU9VU9jIOps\nUDXTdIy2k0qdttKYkrPs8Gf7_beUkON_IE-FGnwwuE4-Cw\n-----END SIB SIGNATURE-----",
+  "block": "-----BEGIN SIB SIGNED INSTRUCTION-----\nYou may deploy the current main branch to staging with\nscripts/deploy.sh staging whenever the test suite passes.\n-----BEGIN SIB SIGNATURE-----\nSigner: alice@example.com\nExpires: 2026-09-13T20:00:00Z\nAudience: acme/dev-agent\n\neyJhbGciOiJFZERTQSIsImF1ZCI6ImFjbWUvZGV2LWFnZW50IiwiYjY0IjpmYWxz\nZSwiY2Fub24iOiJ0ZXh0LzEiLCJjcml0IjpbImI2NCJdLCJleHAiOiIyMDI2LTA5\nLTEzVDIwOjAwOjAwWiIsImlhdCI6IjIwMjYtMDktMTNUMTE6NTU6MDBaIiwiaXNz\nIjoiYWxpY2VAZXhhbXBsZS5jb20iLCJqdGkiOiJHWEZGbG42UDRPLXdBMDYyIiwi\na2lkIjoiYWxpY2VAZXhhbXBsZS5jb20jZGV2LTIwMjYtMDkiLCJtb2RlIjoiZGV2\nIiwidHlwIjoiU0lCLzEifQ..1lBaB1yfI9aWN9ooNTDQVtfqvFd4TtkTPpIMk0Jg\njdm-Gm2nPoF6lJRVzF-fe7wjxj1KnriqR1ZJ06Kto5y7DQ\n-----END SIB SIGNATURE-----",
   "registry": {
     "signers": [
       {
@@ -10,9 +10,9 @@
           {
             "kid": "alice@example.com#dev-2026-09",
             "alg": "EdDSA",
-            "public_key": "kLuSRUl_7PCVjqPo6bOJZ4RJPmDnRS4xWNyVrm7vIYc",
+            "public_key": "kvvYS3x0e9ZBmDLUUa3vQXY7_ga_6yG8zYAwNaTLMX8",
             "mode": "dev",
-            "enrolled_at": "2026-09-13T14:07:43Z",
+            "enrolled_at": "2026-10-05T11:51:02Z",
             "attestation_verified": false,
             "attestation": {},
             "revoked": true

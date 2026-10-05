@@ -7,15 +7,18 @@ human wrote it and when, and a deterministic verifier in the harness tells the
 permission classifier which text is human-signed and which is not.
 
 This repository holds the phased plans, the Phase 0 experiments, and the
-Phase 1 reference implementation (dev-mode keys, Claude Code integration).
+reference implementation: dev-mode keys (Phase 1), passkey signing with Touch
+ID or another WebAuthn authenticator (Phase 2), and the Claude Code
+integration.
 
 - `plans/`: phase plans, the worked format example, and findings memos.
 - `sib/`: the library and `sib` CLI (canonicalization, header, envelope,
-  verifier, manifest, classifier, Claude Code hooks).
+  verifier, manifest, classifier, Claude Code hooks, the local signing app).
 - `testbed/`: the small project the scenarios run against.
 - `scenarios/`: headless runners for Claude Code and Codex, the usage gate,
   and result files.
-- `tests/`: unit tests, property tests, and hook fault-injection tests.
+- `tests/`: unit tests, property tests, hook fault-injection tests, and the
+  WebAuthn path driven by a software authenticator.
 
 ## Quick start (dev mode)
 
@@ -37,7 +40,31 @@ uv run sib verify tampered.txt --audience acme/dev-agent    # invalid_signature
 ```
 
 Every dev-mode operation prints a warning: software-only keys prove possession
-of a key file, not a verified human. Biometric (WebAuthn) signing is Phase 2.
+of a key file, not a verified human.
+
+## Signing with a passkey (enforced mode)
+
+```bash
+# 1. Enroll a passkey: opens a page on http://localhost:7391 that creates one
+#    with user verification required (Touch ID, Windows Hello, a security key)
+uv run sib enroll --signer alice@example.com
+
+# 2. Sign: the sign page shows the canonical text and the terms; the
+#    authenticator signs a challenge that is the hash of exactly that
+uv run sib sign --signer alice@example.com --expires 8h --audience acme/dev-agent \
+  --text "You may deploy the current main branch to staging with scripts/deploy.sh staging whenever the test suite passes." --out block.txt
+
+# 3. Verify runs in enforced mode once a passkey is enrolled: no warning,
+#    dev-mode blocks confer nothing
+uv run sib verify block.txt --audience acme/dev-agent
+```
+
+The verifier requires the user-verification flag, binds the assertion to the
+enrolled origin and RP ID, and accepts only authenticator models on a
+biometric-capable allowlist. What that does and does not prove (user
+verification is not biometric verification; the model identifier is
+self-reported unless attestation was verified) is spelled out in the
+[Biometric Signing](docs/guide/components/signing.qmd) page.
 
 `uv run sib` runs the command in the project environment without activating it.
 To use `sib` directly, activate the environment once per shell:
@@ -71,6 +98,9 @@ actions (see `testbed/.sib-policy.json`). Three hooks then run:
   no decision when a verified instruction covers it.
 - **PostToolUse** hands the auto-mode classifier a short provenance note
   through `classifierContext`, the channel Phase 0 found decisive.
+
+The hooks run in enforced mode once a passkey is enrolled in `SIB_HOME` and in
+dev mode before that; `SIB_MODE` overrides either.
 
 The reference classifier uses the Anthropic SDK when `ANTHROPIC_API_KEY` is
 set, otherwise `claude -p` on the subscription login
