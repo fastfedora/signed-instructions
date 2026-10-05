@@ -25,6 +25,9 @@ and the plans are published as they stand in the repository; neither has been th
 - [Phase 1 Findings](plans/findings/phase-1.md): The minimal prototype with dev keys and the
   before-and-after scenarios.
 
+- [Phase 2 Findings](plans/findings/phase-2.md): Passkey signing through the browser, the
+  WebAuthn verifier path and what the headless-browser run showed.
+
 - [Attack Catalog](attacks.qmd): Every injection vector, channel probe, harness test and failed
   experimental design, with what happened and where the evidence is.
 

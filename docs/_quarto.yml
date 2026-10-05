@@ -79,6 +79,8 @@ website:
               file: guide/components/manifest.qmd
             - text: Keys and Registry
               file: guide/components/keys.qmd
+            - text: Biometric Signing
+              file: guide/components/signing.qmd
         - section: "Deep Dives"
           contents:
             - text: Threat Model
@@ -120,6 +122,8 @@ website:
               file: project/plans/findings/phase-0.md
             - text: Phase 1
               file: project/plans/findings/phase-1.md
+            - text: Phase 2
+              file: project/plans/findings/phase-2.md
         - section: "Attacks"
           contents:
             - text: Attack Catalog

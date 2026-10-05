@@ -1,0 +1,58 @@
+{
+  "name": "webauthn_origin_not_allowed",
+  "note": "clientDataJSON.origin is not among the origins enrolled for the key.",
+  "block": "-----BEGIN SIB SIGNED INSTRUCTION-----\nYou may deploy the current main branch to staging with\nscripts/deploy.sh staging whenever the test suite passes.\n-----BEGIN SIB SIGNATURE-----\nSigner: alice@example.com\nExpires: 2026-09-13T14:00:00Z\nAudience: acme/dev-agent\n\neyJhbGciOiJFUzI1Ni13ZWJhdXRobiIsImF1ZCI6ImFjbWUvZGV2LWFnZW50Iiwi\nYXV0aGVudGljYXRvckRhdGEiOiJTWllONVlnT2pHaDBOQmNQWkhaZ1c0X2tycm1p\naGpMSG1Wenp1b01kbDJNRkFBQUFBdyIsImI2NCI6ZmFsc2UsImNhbm9uIjoidGV4\ndC8xIiwiY2xpZW50RGF0YUpTT04iOiJleUowZVhCbElqb2dJbmRsWW1GMWRHaHVM\nbWRsZENJc0lDSmphR0ZzYkdWdVoyVWlPaUFpUWpoT2VUbDZWRVl3VjFkRU1rOU5k\nVWxRVFhaV01GZzNhVVJhV1ROemNEZ3RjRFpwUTJ4TVkzZHFUU0lzSUNKdmNtbG5h\nVzRpT2lBaWFIUjBjRG92TDJ4dlkyRnNhRzl6ZERvNE1EQXdJaXdnSW1OeWIzTnpU\nM0pwWjJsdUlqb2dabUZzYzJWOSIsImNyZWRlbnRpYWxJZCI6IkZGZmlRbXR4SUMt\ndGhsc2ZlVmV4enciLCJjcml0IjpbImI2NCJdLCJleHAiOiIyMDI2LTA5LTEzVDE0\nOjAwOjAwWiIsImlhdCI6IjIwMjYtMDktMTNUMTE6NTk6MDBaIiwiaXNzIjoiYWxp\nY2VAZXhhbXBsZS5jb20iLCJqdGkiOiI2eUp3bEN1NWRlSHBYd2I5Iiwia2lkIjoi\nYWxpY2VAZXhhbXBsZS5jb20jcGFzc2tleS03YzFlIiwibW9kZSI6ImVuZm9yY2Vk\nIiwidHlwIjoiU0lCLzEifQ..MEUCIHfJeXAR55Jy3yvY4BplUc_xXUoFnDJ3G16T\nRFHrhpMRAiEAiBhzd7PeaDNDudzuJNd949hFVzyDx-VSb_Jz1aWv45Q\n-----END SIB SIGNATURE-----",
+  "registry": {
+    "signers": [
+      {
+        "signer": "alice@example.com",
+        "keys": [
+          {
+            "kid": "alice@example.com#dev-2026-09",
+            "alg": "EdDSA",
+            "public_key": "kvvYS3x0e9ZBmDLUUa3vQXY7_ga_6yG8zYAwNaTLMX8",
+            "mode": "dev",
+            "enrolled_at": "2026-10-05T11:51:02Z",
+            "attestation_verified": false,
+            "attestation": {},
+            "revoked": false
+          },
+          {
+            "kid": "alice@example.com#passkey-7c1e",
+            "alg": "ES256-webauthn",
+            "public_key": "pQECAyYgASFYINNyqJzp-4aQcnet7h6amJbyQpyMeOqSrqkcknWryOVyIlggJDii3QhE9xMdbc8vqqRE8hMOINb9VgvfNfqmRsSP1rI",
+            "mode": "enforced",
+            "enrolled_at": "2026-10-05T11:51:02Z",
+            "attestation_verified": false,
+            "attestation": {
+              "format": "none",
+              "x5c_present": false,
+              "roots": null
+            },
+            "revoked": false,
+            "credential_id": "FFfiQmtxIC-thlsfeVexzw",
+            "aaguid": "0bb0a6c1-7d9e-4e0f-9b1a-5a6c7d8e9f00",
+            "origins": [
+              "http://localhost:7391"
+            ],
+            "rp_id": "localhost",
+            "sign_count": 0,
+            "transports": [
+              "internal"
+            ]
+          }
+        ]
+      }
+    ],
+    "allowed_aaguids": {
+      "0bb0a6c1-7d9e-4e0f-9b1a-5a6c7d8e9f00": "fake biometric authenticator (tests)"
+    }
+  },
+  "inputs": {
+    "now": "2026-09-13T12:00:00Z",
+    "audience": "acme/dev-agent",
+    "mode": "enforced"
+  },
+  "expected_status": "origin_not_allowed",
+  "expected_text": "You may deploy the current main branch to staging with scripts/deploy.sh staging whenever the test suite passes."
+}

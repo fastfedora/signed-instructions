@@ -1,7 +1,7 @@
 {
   "name": "verified_after_transport",
   "note": "Quoted with '> ', one line re-wrapped: canonical text unchanged.",
-  "block": "> -----BEGIN SIB SIGNED INSTRUCTION-----\n> You may deploy the current main branch to staging with scripts/deploy.sh staging whenever the test suite passes.\n> -----BEGIN SIB SIGNATURE-----\n> Signer: alice@example.com\n> Expires: 2026-09-13T20:00:00Z\n> Audience: acme/dev-agent\n> \n> eyJhbGciOiJFZERTQSIsImF1ZCI6ImFjbWUvZGV2LWFnZW50IiwiYjY0IjpmYWxz\n> ZSwiY2Fub24iOiJ0ZXh0LzEiLCJjcml0IjpbImI2NCJdLCJleHAiOiIyMDI2LTA5\n> LTEzVDIwOjAwOjAwWiIsImlhdCI6IjIwMjYtMDktMTNUMTE6NTU6MDBaIiwiaXNz\n> IjoiYWxpY2VAZXhhbXBsZS5jb20iLCJqdGkiOiI1Q0dTWjY0TDJmYnBJYVRtIiwi\n> a2lkIjoiYWxpY2VAZXhhbXBsZS5jb20jZGV2LTIwMjYtMDkiLCJtb2RlIjoiZGV2\n> IiwidHlwIjoiU0lCLzEifQ..gj6L6Rv4K_KlUv5REbGfpz1CkhUYKwU9VU9jIOps\n> UDXTdIy2k0qdttKYkrPs8Gf7_beUkON_IE-FGnwwuE4-Cw\n> -----END SIB SIGNATURE-----",
+  "block": "> -----BEGIN SIB SIGNED INSTRUCTION-----\n> You may deploy the current main branch to staging with scripts/deploy.sh staging whenever the test suite passes.\n> -----BEGIN SIB SIGNATURE-----\n> Signer: alice@example.com\n> Expires: 2026-09-13T20:00:00Z\n> Audience: acme/dev-agent\n> \n> eyJhbGciOiJFZERTQSIsImF1ZCI6ImFjbWUvZGV2LWFnZW50IiwiYjY0IjpmYWxz\n> ZSwiY2Fub24iOiJ0ZXh0LzEiLCJjcml0IjpbImI2NCJdLCJleHAiOiIyMDI2LTA5\n> LTEzVDIwOjAwOjAwWiIsImlhdCI6IjIwMjYtMDktMTNUMTE6NTU6MDBaIiwiaXNz\n> IjoiYWxpY2VAZXhhbXBsZS5jb20iLCJqdGkiOiJHWEZGbG42UDRPLXdBMDYyIiwi\n> a2lkIjoiYWxpY2VAZXhhbXBsZS5jb20jZGV2LTIwMjYtMDkiLCJtb2RlIjoiZGV2\n> IiwidHlwIjoiU0lCLzEifQ..1lBaB1yfI9aWN9ooNTDQVtfqvFd4TtkTPpIMk0Jg\n> jdm-Gm2nPoF6lJRVzF-fe7wjxj1KnriqR1ZJ06Kto5y7DQ\n> -----END SIB SIGNATURE-----",
   "registry": {
     "signers": [
       {
@@ -10,12 +10,36 @@
           {
             "kid": "alice@example.com#dev-2026-09",
             "alg": "EdDSA",
-            "public_key": "kLuSRUl_7PCVjqPo6bOJZ4RJPmDnRS4xWNyVrm7vIYc",
+            "public_key": "kvvYS3x0e9ZBmDLUUa3vQXY7_ga_6yG8zYAwNaTLMX8",
             "mode": "dev",
-            "enrolled_at": "2026-09-13T14:07:43Z",
+            "enrolled_at": "2026-10-05T11:51:02Z",
             "attestation_verified": false,
             "attestation": {},
             "revoked": false
+          },
+          {
+            "kid": "alice@example.com#passkey-7c1e",
+            "alg": "ES256-webauthn",
+            "public_key": "pQECAyYgASFYINNyqJzp-4aQcnet7h6amJbyQpyMeOqSrqkcknWryOVyIlggJDii3QhE9xMdbc8vqqRE8hMOINb9VgvfNfqmRsSP1rI",
+            "mode": "enforced",
+            "enrolled_at": "2026-10-05T11:51:02Z",
+            "attestation_verified": false,
+            "attestation": {
+              "format": "none",
+              "x5c_present": false,
+              "roots": null
+            },
+            "revoked": false,
+            "credential_id": "FFfiQmtxIC-thlsfeVexzw",
+            "aaguid": "0bb0a6c1-7d9e-4e0f-9b1a-5a6c7d8e9f00",
+            "origins": [
+              "http://localhost:7391"
+            ],
+            "rp_id": "localhost",
+            "sign_count": 0,
+            "transports": [
+              "internal"
+            ]
           }
         ]
       }

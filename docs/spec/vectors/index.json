@@ -68,5 +68,50 @@
     "name": "revoked",
     "expected_status": "revoked",
     "note": "The key is marked revoked in the registry."
+  },
+  {
+    "name": "webauthn_verified",
+    "expected_status": "verified",
+    "note": "Signed by a passkey: UV set, origin and RP ID enrolled, AAGUID allowlisted."
+  },
+  {
+    "name": "webauthn_verified_dev_mode",
+    "expected_status": "verified",
+    "note": "The same block in dev mode: both paths verify there."
+  },
+  {
+    "name": "webauthn_invalid_signature",
+    "expected_status": "invalid_signature",
+    "note": "One word changed after signing: the recomputed challenge no longer matches clientDataJSON."
+  },
+  {
+    "name": "webauthn_uv_not_performed",
+    "expected_status": "uv_not_performed",
+    "note": "The assertion's UV flag is clear."
+  },
+  {
+    "name": "webauthn_origin_not_allowed",
+    "expected_status": "origin_not_allowed",
+    "note": "clientDataJSON.origin is not among the origins enrolled for the key."
+  },
+  {
+    "name": "webauthn_rp_id_mismatch",
+    "expected_status": "rp_id_mismatch",
+    "note": "rpIdHash is not SHA-256 of the enrolled RP ID."
+  },
+  {
+    "name": "webauthn_unknown_key_wrong_credential",
+    "expected_status": "unknown_key",
+    "note": "credentialId is not the credential enrolled under this kid."
+  },
+  {
+    "name": "webauthn_authenticator_not_allowed",
+    "expected_status": "authenticator_not_allowed",
+    "note": "The same block against a registry whose allowlist lacks the authenticator's AAGUID."
+  },
+  {
+    "name": "dev_block_with_passkey_enrolled",
+    "expected_status": "dev_key_in_enforced_mode",
+    "note": "A dev block once a passkey is enrolled: the default mode is enforced and dev keys confer nothing."
   }
 ]

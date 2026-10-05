@@ -5,6 +5,7 @@
   "signing_input": "header.qmd#signing_input",
   "extract": "envelope.qmd#extract",
   "generate": "keys_dev.qmd#generate",
+  "default_mode": "registry.qmd#default_mode",
   "verify_block": "verify.qmd#verify_block",
   "render_classifier_note": "manifest.qmd#render_classifier_note",
   "classify": "classifier.qmd#classify",
@@ -15,5 +16,6 @@
   "run_hook": "hooks.qmd#run_hook",
   "transcript_blocks": "hooks.qmd#transcript_blocks",
   "default_kid": "cli.qmd#default_kid",
+  "passkey_kid": "cli.qmd#passkey_kid",
   "resolve_signer_and_kid": "cli.qmd#resolve_signer_and_kid"
 }

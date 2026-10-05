@@ -103,8 +103,8 @@ Harness
 - [RFC 8032](https://www.rfc-editor.org/rfc/rfc8032) (EdDSA) for the `EdDSA` algorithm, curve
   Ed25519.
 
-- [WebAuthn Level 3](https://www.w3.org/TR/webauthn-3/) for the `ES256-webauthn` algorithm
-  (reserved, Phase 2).
+- [WebAuthn Level 3](https://www.w3.org/TR/webauthn-3/) for the `ES256-webauthn` algorithm:
+  the assertion format, the user-verification flag and attestation.
 
 - [RFC 9580](https://www.rfc-editor.org/rfc/rfc9580) section 7 (OpenPGP cleartext signatures) as
   prior art for the readable-text-plus-detached-signature layout.
