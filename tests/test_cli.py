@@ -81,7 +81,7 @@ from tests.fake_authenticator import FakeAuthenticator, enroll_fake, ORIGIN
 
 
 def _fake_sign_in_browser(auth):
-    def fake(header, ctext, key, allowed, timeout=180, open_browser=True):
+    def fake(header, ctext, key, allowed, timeout=180, open_browser=True, browser=None):
         from dataclasses import replace
         a = auth.get(keys_webauthn.challenge(header.encode(), ctext))
         full = replace(header, credentialId=a["rawId"], authenticatorData=a["response"]["authenticatorData"],
@@ -103,7 +103,7 @@ def test_enroll_passkey_in_browser(sib_home, monkeypatch):
     auth = FakeAuthenticator()
     chal = b"\x05" * 32
 
-    def fake_enroll(signer, existing, allowed, timeout=180, open_browser=True):
+    def fake_enroll(signer, existing, allowed, timeout=180, open_browser=True, browser=None):
         assert signer == "alice@example.com" and existing == []
         return keys_webauthn.verify_enrollment(auth.register(chal), chal, ORIGIN, roots={})
     import sib.webauthn_app

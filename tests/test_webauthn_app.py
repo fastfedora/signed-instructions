@@ -193,3 +193,42 @@ def test_abort_ends_the_request_with_the_browser_error(sib_home):
     p = state.pending[token]
     assert p.done.is_set() and p.error == "the browser reported: The operation either timed out or was not allowed."
     assert c.get(f"/sign/{token}").status_code == 404
+
+
+def test_open_url_picks_the_configured_browser(monkeypatch, tmp_path):
+    import webbrowser
+    from sib.webauthn_app import open_url, BrowserFlowError
+    opened = []
+    monkeypatch.setattr(webbrowser, "open", lambda url: opened.append(("default", url)))
+
+    class Named:
+        def open(self, url):
+            opened.append(("named", url))
+
+    def get(name):
+        if name == "safari":
+            return Named()
+        raise webbrowser.Error(name)
+    monkeypatch.setattr(webbrowser, "get", get)
+    monkeypatch.delenv("SIB_BROWSER", raising=False)
+    open_url("http://localhost:7391/x")
+    assert opened[-1] == ("default", "http://localhost:7391/x")
+    open_url("http://localhost:7391/x", "safari")
+    assert opened[-1] == ("named", "http://localhost:7391/x")
+    monkeypatch.setenv("SIB_BROWSER", "safari")
+    open_url("http://localhost:7391/y")
+    assert opened[-1] == ("named", "http://localhost:7391/y")
+    # an unknown name is run as a command with the URL appended
+    log = tmp_path / "log"
+    script = tmp_path / "fakebrowser.sh"
+    script.write_text(f'#!/bin/sh\necho "$@" > "{log}"\n')
+    script.chmod(0o755)
+    open_url("http://localhost:7391/z", f"{script} --new-window")
+    import time
+    for _ in range(50):
+        if log.exists() and log.read_text().strip():
+            break
+        time.sleep(0.05)
+    assert log.read_text().split() == ["--new-window", "http://localhost:7391/z"]
+    with pytest.raises(BrowserFlowError, match="could not open"):
+        open_url("http://localhost:7391/z", str(tmp_path / "missing-browser"))
