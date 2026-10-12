@@ -134,6 +134,89 @@ keys; with several candidates, the command lists them and asks for `--kid`.
 `--timeout SECONDS`, `--no-browser`, `--browser NAME`
 : As for `enroll`.
 
+### install
+
+Install SIB into an agent harness. Takes the harness as a sub-subcommand.
+
+#### install claude-code
+
+Writes the two hooks, which verify every block in context and hand the harness's own classifier a
+provenance note.
+
+`--settings-json FILE`
+: Write one settings file carrying the hooks and the autoMode rule, for `claude --settings FILE`.
+  The recommended path: both halves stay together and apply only to runs that name the file.
+
+`--project PATH`
+: Merge the hook entries into `PATH/.claude/settings.json` and print the autoMode rule to add to
+  `~/.claude/settings.json` by hand, since Claude Code does not read `autoMode` from project
+  settings.
+
+`--layers LIST`
+: Comma-separated subset of `prompt` and `post` (default: both).
+
+`--no-prose`
+: Omit the autoMode rule.
+
+`--print-auto-mode`
+: Print the autoMode block as JSON and nothing else.
+
+#### install codex
+
+Writes the auto-review configuration that makes Codex's reviewer run `sib verify` itself and score
+a verified signature as user authorization.
+
+It merges rather than overwrites, so it is safe to run against a configuration you already use.
+Every setting it does not own is left where it is, the previous file is copied to
+`<config>.sib-bak` before anything is written, and it asks before each change:
+
+- **Setting `approvals_reviewer = "auto_review"`** — the default is yes when the key is absent, and
+  no when you have already set it to something else, since enabling the reviewer should not
+  silently discard a choice you made. Declining still writes the policy; the reviewer can then be
+  enabled per run with `codex exec --approve-for-me`.
+
+- **Replacing `experimental_policy_template` or `extra_policy`** — asked only when a previous run
+  (or you) already set them, and the default is no. Declining writes nothing at all.
+
+- **Writing the merged file** — the default is yes. Declining prints the `[auto_review]` keys for
+  you to place by hand.
+
+Keys may be installed before any are enrolled. The installer creates no registry and says so:
+until `sib keygen --signer <you> --enroll` runs, every block verifies as `unknown_signer`, which
+is the safe direction — nothing is authorized.
+
+`--audience ID`
+: The identifier this harness presents to the verifier. Required, or set `SIB_AUDIENCE`. It is
+  baked into the command the reviewer runs.
+
+`--config PATH`
+: Config file to merge into (default: `~/.codex/config.toml`).
+
+`--sib-path PATH`
+: Absolute path to the `sib` binary the reviewer will run (default: the one on `PATH`).
+
+`--home PATH`
+: Registry directory, written into the command as `SIB_HOME` (default: `~/.sib`). Keep it outside
+  any repository; an agent that can write there can enroll its own key.
+
+`--print`
+: Print the configuration and write nothing.
+
+`--yes`
+: Answer yes to every question, for scripting. A reviewer you set to another value is still kept.
+
+::: {.callout-note}
+The configuration pins Codex's own Guardian prompt template, because `auto_review.extra_policy` is
+silently dropped with the template the model catalog serves, which has no `{{ extra_policy }}` slot
+(openai/codex#50309). When that is fixed the template pin can go and `extra_policy` alone will do.
+:::
+
+::: {.callout-important}
+SIB scores authorization, not risk. Codex allows low and medium risk actions whatever the
+authorization, so a deploy is only refused when your own policy says that class of action needs
+authorizing. Add that rule under `[auto_review]` yourself; the installer says so too.
+:::
+
 ### verify
 
 Extract and verify every block in a file. Exits with status 0 only when at least one block was

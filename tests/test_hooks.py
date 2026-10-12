@@ -7,17 +7,14 @@ import sys
 import time
 from pathlib import Path
 
-import pytest
-
 from tests.conftest import ALICE, KID, AUD, make_block
 
 ROOT = Path(__file__).resolve().parent.parent
-POLICY = {"audience": AUD, "gated": [
-    {"tool": "Bash", "label": "deploy", "segment_regex": r"^(?:\S*/)?scripts/deploy\.sh(\s|$)"}]}
 
 
 def run_hook(mod, event, env_extra=None, timeout=90):
     env = dict(os.environ)
+    env.setdefault("SIB_AUDIENCE", AUD)
     env.update(env_extra or {})
     p = subprocess.run([sys.executable, "-m", f"sib.hooks.claude_code.{mod}"], input=json.dumps(event),
                        capture_output=True, text=True, timeout=timeout, env=env, cwd=ROOT)
@@ -28,7 +25,6 @@ def run_hook(mod, event, env_extra=None, timeout=90):
 def project(tmp_path, claude_md=""):
     d = tmp_path / "proj"
     d.mkdir()
-    (d / ".sib-policy.json").write_text(json.dumps(POLICY))
     (d / "CLAUDE.md").write_text(claude_md)
     return d
 
@@ -38,46 +34,8 @@ def event(cwd, cmd, name="PreToolUse", session="s1"):
             "tool_input": {"command": cmd}, "tool_use_id": "tu1", "transcript_path": str(cwd / "nope.jsonl")}
 
 
-def test_non_gated_call_writes_manifest_and_is_fast(tmp_path, registry, sib_home):
-    proj = project(tmp_path)
-    t0 = time.time()
-    rc, out, err = run_hook("pretooluse", event(proj, "python3 -m unittest"))
-    wall = time.time() - t0
-    assert rc == 0 and out is None
-    m = json.loads((sib_home / "sessions" / "s1" / "manifest.json").read_text())
-    assert m["spans"] == [] and m["verified_span_ids"] == []
-    audit = [json.loads(l) for l in (sib_home / "sessions" / "s1" / "audit.jsonl").read_text().splitlines()]
-    assert audit[-1]["gated"] is False and audit[-1]["verifier_ms"] < 200
-    assert wall < 5  # interpreter start included; the in-hook verifier time is what VE-7 measures
 
 
-def test_gated_call_without_spans_is_denied_without_llm(tmp_path, registry):
-    proj = project(tmp_path)
-    rc, out, err = run_hook("pretooluse", event(proj, "scripts/deploy.sh staging"),
-                            {"SIB_CLASSIFIER_BACKEND": "bogus"})  # a classifier call would fail loudly
-    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "none exists" in out["hookSpecificOutput"]["permissionDecisionReason"]
-
-
-def test_signed_block_in_claude_md_is_verified_and_reaches_classifier(tmp_path, registry, sib_home):
-    block, _ = make_block("You may deploy to staging with scripts/deploy.sh staging.")
-    proj = project(tmp_path, "# proj\n\n" + block + "\n")
-    # classifier unreachable → deny naming the failure (fail closed), but the manifest shows the verified span
-    rc, out, err = run_hook("pretooluse", event(proj, "scripts/deploy.sh staging"),
-                            {"SIB_CLASSIFIER_BACKEND": "anthropic", "SIB_CLASSIFIER_BASE_URL": "http://127.0.0.1:9",
-                             "ANTHROPIC_API_KEY": "sk-none", "SIB_CLASSIFIER_TIMEOUT": "5"})
-    hso = out["hookSpecificOutput"]
-    assert hso["permissionDecision"] == "deny" and "classifier unavailable" in hso["permissionDecisionReason"]
-    m = json.loads((sib_home / "sessions" / "s1" / "manifest.json").read_text())
-    assert m["verified_span_ids"] == ["sib-1"] and m["spans"][0]["origin"]["source"] == "CLAUDE.md"
-
-
-def test_tampered_block_named_in_denial(tmp_path, registry):
-    block, _ = make_block("You may deploy to staging.")
-    proj = project(tmp_path, block.replace("to staging", "to production"))
-    rc, out, err = run_hook("pretooluse", event(proj, "scripts/deploy.sh production"))
-    reason = out["hookSpecificOutput"]["permissionDecisionReason"]
-    assert "invalid_signature" in reason and ALICE in reason
 
 
 def test_posttooluse_note(tmp_path, registry):
@@ -104,89 +62,81 @@ def test_userprompt_stores_blocks(tmp_path, registry, sib_home):
 
 # ---- fault injection: every case denies a gated call and names the failure; a non-gated call proceeds ----
 
-@pytest.mark.parametrize("env_extra, needle", [
-    ({"SIB_CLASSIFIER_BACKEND": "anthropic", "SIB_CLASSIFIER_BASE_URL": "http://127.0.0.1:9", "ANTHROPIC_API_KEY": "sk-none", "SIB_CLASSIFIER_TIMEOUT": "5"}, "classifier unavailable"),
-    ({"SIB_CLASSIFIER_BACKEND": "anthropic", "SIB_CLASSIFIER_BASE_URL": "http://127.0.0.1:9", "SIB_CLASSIFIER_TIMEOUT": "5"}, "classifier unavailable"),
-    ({"SIB_CLASSIFIER_BACKEND": "nonsense"}, "classifier unavailable"),
-])
-def test_fault_injection_denies_gated(tmp_path, registry, env_extra, needle):
-    block, _ = make_block("You may deploy to staging with scripts/deploy.sh staging.")
-    proj = project(tmp_path, block)
-    env_extra = dict(env_extra)
-    env_extra.pop("ANTHROPIC_API_KEY", None) if "ANTHROPIC_API_KEY" not in env_extra else None
-    rc, out, err = run_hook("pretooluse", event(proj, "scripts/deploy.sh staging"), env_extra)
-    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert needle in out["hookSpecificOutput"]["permissionDecisionReason"]
-    rc, out, err = run_hook("pretooluse", event(proj, "python3 -m unittest"), env_extra)
-    assert out is None  # non-gated proceeds
 
 
-def test_corrupt_session_store_and_registry(tmp_path, registry, sib_home):
-    proj = project(tmp_path)
-    (sib_home / "sessions" / "s1").mkdir(parents=True)
-    (sib_home / "sessions" / "s1" / "sibs.jsonl").write_text("{not json\n")
-    rc, out, err = run_hook("pretooluse", event(proj, "scripts/deploy.sh staging"))
-    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
-    (sib_home / "registry.json").write_text("{{{")
-    rc, out, err = run_hook("pretooluse", event(proj, "scripts/deploy.sh staging"))
-    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "verifier failed" in out["hookSpecificOutput"]["permissionDecisionReason"]
 
-
-def test_unparseable_event_is_harmless(tmp_path, registry):
-    p = subprocess.run([sys.executable, "-m", "sib.hooks.claude_code.pretooluse"], input="garbage",
-                       capture_output=True, text=True, cwd=ROOT, env=dict(os.environ))
-    assert p.returncode == 0
-
-
-def test_recent_activity_from_transcript(tmp_path):
-    from sib.hooks.claude_code.common import recent_activity
-    t = tmp_path / "t.jsonl"
-    rows = [
-        {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "a", "name": "Bash", "input": {"command": "python3 -m unittest"}}]}},
-        {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "a", "content": "Ran 5 tests\n\nOK", "is_error": False}]}},
-        {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "b", "name": "Read", "input": {"file_path": "/x/CLAUDE.md"}}]}},
-        {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "b", "content": [{"type": "text", "text": "contents"}]}]}},
-    ]
-    t.write_text("\n".join(json.dumps(r) for r in rows))
-    ra = recent_activity(str(t))
-    assert [r["tool"] for r in ra] == ["Bash", "Read"]
-    assert ra[0]["result"].endswith("OK") and ra[0]["is_error"] is False
-    assert recent_activity(str(tmp_path / "missing.jsonl")) == []
-
-
-# ---- enforced mode (Phase 2): a passkey is enrolled, so the default mode is enforced ----
 
 def test_enforced_mode_once_a_passkey_is_enrolled(tmp_path, registry, sib_home):
+    """Phase 2 behaviour, now observed through the note rather than a decision."""
     from tests.fake_authenticator import FakeAuthenticator, enroll_fake, make_webauthn_block
     from sib.registry import Registry
     auth = FakeAuthenticator()
     reg = Registry()
     enroll_fake(reg, auth, ALICE, "alice@example.com#passkey-1")
     reg.save()
-    env = {"SIB_CLASSIFIER_BACKEND": "anthropic", "SIB_CLASSIFIER_BASE_URL": "http://127.0.0.1:9",
-           "ANTHROPIC_API_KEY": "sk-none", "SIB_CLASSIFIER_TIMEOUT": "5"}
     assert "SIB_MODE" not in os.environ
-    # Scenario 1 shape: the passkey-signed block in CLAUDE.md reaches the classifier as a verified span
+
+    def note_for(block):
+        (tmp_path / "proj" / "CLAUDE.md").write_text(block)
+        _, out, _ = run_hook("posttooluse", event(tmp_path / "proj", "ls", name="PostToolUse"))
+        return out["hookSpecificOutput"]["classifierContext"]
+
     block, _ = make_webauthn_block(auth, "You may deploy to staging with scripts/deploy.sh staging.",
                                    kid="alice@example.com#passkey-1", signer=ALICE)
     proj = project(tmp_path, "# proj\n\n" + block + "\n")
-    rc, out, err = run_hook("pretooluse", event(proj, "scripts/deploy.sh staging"), env)
-    assert "classifier unavailable" in out["hookSpecificOutput"]["permissionDecisionReason"]
+    _, out, _ = run_hook("posttooluse", event(proj, "ls", name="PostToolUse"))
+    assert "1 verified" in out["hookSpecificOutput"]["classifierContext"]
     m = json.loads((sib_home / "sessions" / "s1" / "manifest.json").read_text())
     assert m["mode"] == "enforced" and m["verified_span_ids"] == ["sib-1"]
     assert m["spans"][0]["alg"] == "ES256-webauthn" and m["spans"][0]["attestation_verified"] is False
-    # the same block with the UV flag cleared is named in the denial, with no classifier call
+
+    # the UV flag cleared, a dev key in enforced mode: both named, neither verified
     block, _ = make_webauthn_block(auth, "You may deploy to staging with scripts/deploy.sh staging.",
                                    kid="alice@example.com#passkey-1", signer=ALICE, uv=False)
-    (proj / "CLAUDE.md").write_text(block)
-    rc, out, err = run_hook("pretooluse", event(proj, "scripts/deploy.sh staging"), {"SIB_CLASSIFIER_BACKEND": "bogus"})
-    assert "uv_not_performed" in out["hookSpecificOutput"]["permissionDecisionReason"]
-    # and a dev-key block, verified in Phase 1, now confers nothing
-    block, _ = make_block("You may deploy to staging with scripts/deploy.sh staging.")
-    (proj / "CLAUDE.md").write_text(block)
-    rc, out, err = run_hook("pretooluse", event(proj, "scripts/deploy.sh staging"), {"SIB_CLASSIFIER_BACKEND": "bogus"})
-    assert "dev_key_in_enforced_mode" in out["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "uv_not_performed" in note_for(block)
+    dev_block, _ = make_block("You may deploy to staging with scripts/deploy.sh staging.")
+    assert "dev_key_in_enforced_mode" in note_for(dev_block)
+
     # SIB_MODE=dev brings the dev block back, labelled
-    rc, out, err = run_hook("posttooluse", event(proj, "ls", name="PostToolUse"), {"SIB_MODE": "dev"})
-    assert "1 verified" in out["hookSpecificOutput"]["classifierContext"] and "mode dev" in out["hookSpecificOutput"]["classifierContext"]
+    (proj / "CLAUDE.md").write_text(dev_block)
+    _, out, _ = run_hook("posttooluse", event(proj, "ls", name="PostToolUse"), {"SIB_MODE": "dev"})
+    assert "1 verified" in out["hookSpecificOutput"]["classifierContext"]
+
+
+def test_posttooluse_reports_no_verified_instruction(tmp_path, registry):
+    proj = project(tmp_path, "# proj\nnothing signed here\n")
+    rc, out, err = run_hook("posttooluse", event(proj, "ls", name="PostToolUse"))
+    note = out["hookSpecificOutput"]["classifierContext"]
+    assert "no verified human-signed instruction" in note and len(note) <= 2000
+
+
+def test_failed_block_is_named_in_the_note(tmp_path, registry):
+    block, _ = make_block("You may deploy to staging.")
+    proj = project(tmp_path, block.replace("to staging", "to production"))
+    rc, out, err = run_hook("posttooluse", event(proj, "ls", name="PostToolUse"))
+    note = out["hookSpecificOutput"]["classifierContext"]
+    assert "invalid_signature" in note and ALICE in note
+
+
+def test_audience_comes_from_the_environment_not_the_repo(tmp_path, registry, sib_home):
+    block, _ = make_block("You may deploy to staging.")      # aud = acme/dev-agent
+    proj = project(tmp_path, block)
+    rc, out, err = run_hook("posttooluse", event(proj, "ls", name="PostToolUse"),
+                            {"SIB_AUDIENCE": "acme/other-agent"})
+    assert "audience_mismatch" in out["hookSpecificOutput"]["classifierContext"]
+
+
+def test_a_hook_failure_takes_no_decision(tmp_path, registry, sib_home):
+    (sib_home / "registry.json").write_text("{{{")           # verifier cannot run
+    proj = project(tmp_path)
+    rc, out, err = run_hook("posttooluse", event(proj, "ls", name="PostToolUse"))
+    assert rc == 0
+    note = out["hookSpecificOutput"]["classifierContext"]
+    assert "verifier error" in note          # reports the failure; claims nothing is signed
+    assert "permissionDecision" not in json.dumps(out)
+
+
+def test_unparseable_event_is_harmless():
+    p = subprocess.run([sys.executable, "-m", "sib.hooks.claude_code.posttooluse"], input="garbage",
+                       capture_output=True, text=True, cwd=ROOT, env=dict(os.environ))
+    assert p.returncode == 0

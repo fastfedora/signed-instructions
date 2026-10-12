@@ -1,7 +1,9 @@
 """CLI identifier defaults: either the signer or the kid is enough."""
 import datetime as dt
+import json
 import subprocess
 import sys
+import tomllib
 
 import pytest
 
@@ -161,3 +163,115 @@ def test_sign_refuses_an_assertion_that_does_not_verify(sib_home, monkeypatch):
     monkeypatch.setattr(sib.webauthn_app, "sign_in_browser", _fake_sign_in_browser(auth))
     rc, out, err = run(["sign", "--signer", "alice@example.com", "--audience", "a", "--text", "x"])
     assert rc != 0 and "authenticator_not_allowed" in err and "no block written" in err and out == ""
+
+
+def test_install_writes_one_settings_file(sib_home, tmp_path):
+    out = tmp_path / "sib-settings.json"
+    rc, so, se = run(["install", "claude-code", "--settings-json", str(out)])
+    assert rc == 0
+    d = json.loads(out.read_text())
+    assert sorted(d["hooks"]) == ["PostToolUse", "UserPromptSubmit"]
+    # the autoMode rule must be inert where no provenance note is delivered
+    assert "does not apply at all" in d["autoMode"]["soft_deny"][1]
+
+
+def test_install_into_a_project(sib_home, tmp_path):
+    repo = tmp_path / "repo"; repo.mkdir()
+    rc, so, se = run(["install", "claude-code", "--project", str(repo)])
+    assert rc == 0
+    d = json.loads((repo / ".claude" / "settings.json").read_text())
+    assert "PostToolUse" in d["hooks"] and "autoMode" not in d   # project settings never carry autoMode
+    assert "~/.claude/settings.json" in so
+
+
+def test_install_layers_and_no_target(sib_home, tmp_path):
+    out = tmp_path / "s.json"
+    rc, so, se = run(["install", "claude-code", "--settings-json", str(out), "--layers", "post", "--no-prose"])
+    assert rc == 0
+    d = json.loads(out.read_text())
+    assert sorted(d["hooks"]) == ["PostToolUse"] and "autoMode" not in d
+    rc, so, se = run(["install", "claude-code"])
+    assert rc != 0 and "nothing to do" in se
+
+
+def test_module_entry_point_still_works(tmp_path):
+    out = tmp_path / "m.json"
+    p = subprocess.run([sys.executable, "-m", "sib.hooks.claude_code.install", "--settings-json", str(out)],
+                       capture_output=True, text=True)
+    assert p.returncode == 0 and json.loads(out.read_text())["hooks"]
+
+
+def test_install_codex_prints_a_usable_fragment(sib_home, tmp_path):
+    rc, so, se = run(["install", "codex", "--audience", "acme/dev-agent",
+                      "--home", str(tmp_path / "sib"), "--sib-path", "/usr/bin/true", "--print"])
+    assert rc == 0
+    assert "[auto_review]" in so and "experimental_policy_template" in so and "extra_policy" in so
+    # the reviewer runs the command literally, so the machine's own values must be baked in
+    assert f"SIB_HOME={tmp_path / 'sib'}" in so and "--audience acme/dev-agent" in so
+    # --print writes nothing and does not offer to
+    assert "appended to" not in so
+
+
+def test_install_codex_writes_and_merges(sib_home, tmp_path):
+    cfg = tmp_path / "config.toml"
+    cfg.write_text("model = \"gpt-6\"\n")
+    args = ["install", "codex", "--audience", "a/b", "--config", str(cfg),
+            "--home", str(tmp_path / "sib"), "--sib-path", "/usr/bin/true", "--yes"]
+    rc, so, se = run(args)
+    assert rc == 0 and "wrote" in so
+    text = cfg.read_text()
+    assert text.startswith("model = ") and "[auto_review]" in text
+    assert 'approvals_reviewer = "auto_review"' in text       # the default answer is yes
+    # a second run replaces our keys rather than refusing, and the result is still one valid file
+    rc, so, se = run(args)
+    assert rc == 0 and "wrote" in so
+    d = tomllib.loads(cfg.read_text())
+    assert d["model"] == "gpt-6" and d["approvals_reviewer"] == "auto_review"
+    assert cfg.read_text().count("extra_policy =") == 1
+    assert (tmp_path / "config.toml.sib-bak").exists()        # the previous file is kept
+
+
+def test_install_codex_leaves_other_settings_alone(sib_home, tmp_path):
+    cfg = tmp_path / "config.toml"
+    cfg.write_text("model = \"gpt-6\"\n\n[auto_review]\nignore_rules = true\n\n"
+                   "[mcp_servers.fs]\ncommand = \"npx\"\n")
+    rc, so, se = run(["install", "codex", "--audience", "a/b", "--config", str(cfg),
+                      "--home", str(tmp_path / "sib"), "--sib-path", "/usr/bin/true", "--yes"])
+    assert rc == 0
+    d = tomllib.loads(cfg.read_text())
+    assert d["auto_review"]["ignore_rules"] is True           # a neighbouring key in our own table
+    assert "extra_policy" in d["auto_review"]
+    assert d["mcp_servers"]["fs"]["command"] == "npx"         # a later table is not swallowed
+
+
+def test_install_codex_keeps_another_reviewer_by_default(sib_home, tmp_path):
+    cfg = tmp_path / "config.toml"
+    cfg.write_text("approvals_reviewer = \"none\"\n")
+    rc, so, se = run(["install", "codex", "--audience", "a/b", "--config", str(cfg),
+                      "--home", str(tmp_path / "sib"), "--sib-path", "/usr/bin/true"])
+    assert rc == 0
+    d = tomllib.loads(cfg.read_text())
+    assert d["approvals_reviewer"] == "none"                  # declining leaves the user's choice
+    assert "extra_policy" in d["auto_review"]                 # the policy still lands
+    assert "--approve-for-me" in se                           # and says how to enable it per run
+
+
+def test_install_codex_asks_before_replacing_our_own_keys(sib_home, tmp_path):
+    cfg = tmp_path / "config.toml"
+    cfg.write_text("[auto_review]\nextra_policy = \"mine\"\n")
+    rc, so, se = run(["install", "codex", "--audience", "a/b", "--config", str(cfg),
+                      "--home", str(tmp_path / "sib"), "--sib-path", "/usr/bin/true"])
+    assert rc != 0 and "left unchanged" in se
+    assert cfg.read_text() == "[auto_review]\nextra_policy = \"mine\"\n"
+
+def test_install_codex_needs_an_audience(sib_home, monkeypatch):
+    monkeypatch.delenv("SIB_AUDIENCE", raising=False)
+    rc, so, se = run(["install", "codex", "--print"])
+    assert rc != 0 and "--audience" in se
+
+
+def test_install_codex_warns_about_a_registry_inside_the_repo(sib_home, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    rc, so, se = run(["install", "codex", "--audience", "a/b", "--home", str(tmp_path / "inside"),
+                      "--sib-path", "/usr/bin/true", "--print"])
+    assert rc == 0 and "inside the working directory" in se

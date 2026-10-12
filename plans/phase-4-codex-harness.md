@@ -13,6 +13,15 @@ from unsigned instructions. Claude Code (Phases 1–3) shows the deployable
 form, where our hook denies upstream of a closed classifier. Codex shows the
 manifest actually being consumed by the harness's own reviewer.
 
+::: {.callout-note}
+Superseded in part by the result. The policy-only path, which this plan did not anticipate,
+reached the full system with no patch and no hooks: the reviewer runs the verifier itself and
+scores a verified signature as `user_authorization: high`. See
+[findings/phase-4-codex.md](findings/phase-4-codex.md). Levels 1 and 2 below remain the plan for
+an integration that does not depend on the reviewer electing to run a command, and the patch is
+still the artifact worth showing a maintainer.
+:::
+
 ## Why Codex
 
 - It ships an LLM auto-approver: `approvals_reviewer = "auto_review"` (GA
