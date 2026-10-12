@@ -49,7 +49,7 @@ This is the recommended path. `--settings-json` writes the hooks and the auto-mo
 single file, which you name on the command line:
 
 ```bash
-uv run python -m sib.hooks.claude_code.install --settings-json sib-settings.json
+uv run sib install claude-code --settings-json sib-settings.json
 claude --settings sib-settings.json
 ```
 
@@ -64,10 +64,10 @@ working in that checkout gets them without a flag. It then prints the auto-mode 
 add to `~/.claude/settings.json` by hand:
 
 ```bash
-uv run python -m sib.hooks.claude_code.install --project /path/to/repo
+uv run sib install claude-code --project /path/to/repo
 
 # Print the rule again on its own
-uv run python -m sib.hooks.claude_code.install --print-auto-mode
+uv run sib install claude-code --print-auto-mode
 ```
 
 Claude Code will not read `autoMode` from a project's settings, so the rule has to live in user

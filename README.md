@@ -84,7 +84,7 @@ uv tool install --editable .
 
 ```bash
 # one settings file carrying the hooks and the autoMode rule, scoped to the run
-uv run python -m sib.hooks.claude_code.install --settings-json sib-settings.json
+uv run sib install claude-code --settings-json sib-settings.json
 claude --settings sib-settings.json
 ```
 

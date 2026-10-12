@@ -1,7 +1,10 @@
-"""Write the SIB hook entries for a project and print the autoMode prose.
+"""Write the SIB hook entries and the autoMode prose.
 
-  python -m sib.hooks.claude_code.install --project /path/to/repo      # writes .claude/settings.json
-  python -m sib.hooks.claude_code.install --settings-json out.json      # combined file for `claude --settings`
+Normally reached as `sib install claude-code`. The module entry point is kept
+because older settings files and scripts invoke it directly:
+
+  python -m sib.hooks.claude_code.install --settings-json out.json   # for `claude --settings`
+  python -m sib.hooks.claude_code.install --project /path/to/repo    # repo .claude/settings.json
   python -m sib.hooks.claude_code.install --print-auto-mode
 """
 import argparse
@@ -46,32 +49,50 @@ def auto_mode_block(with_rule=True) -> dict:
     return {"soft_deny": ["$defaults", AUTO_MODE_SIB_RULE]} if with_rule else {}
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--project", help="write hooks into <project>/.claude/settings.json")
-    ap.add_argument("--settings-json", help="write a combined settings file (hooks + autoMode) for `claude --settings`")
-    ap.add_argument("--layers", default="pre,post,prompt")
-    ap.add_argument("--no-prose", action="store_true", help="omit the autoMode SIB rule")
-    ap.add_argument("--print-auto-mode", action="store_true")
-    a = ap.parse_args()
-    layers = tuple(a.layers.split(","))
-    if a.project:
-        p = Path(a.project) / ".claude" / "settings.json"
+def run_install(project=None, settings_json=None, layers=("pre", "post", "prompt"),
+                no_prose=False, print_auto_mode=False) -> None:
+    """Shared by `sib install claude-code` and the module entry point."""
+    if not (project or settings_json or print_auto_mode):
+        raise SystemExit("nothing to do: give --settings-json, --project or --print-auto-mode")
+    if settings_json:
+        s = {"hooks": hook_entries(layers)}
+        if not no_prose:
+            s["autoMode"] = auto_mode_block()
+        Path(settings_json).write_text(json.dumps(s, indent=2) + "\n")
+        print(f"wrote {settings_json}")
+        print(f"Use it with: claude --settings {settings_json}")
+    if project:
+        p = Path(project) / ".claude" / "settings.json"
         p.parent.mkdir(parents=True, exist_ok=True)
         cur = json.loads(p.read_text()) if p.exists() else {}
         cur.setdefault("hooks", {}).update(hook_entries(layers))
         p.write_text(json.dumps(cur, indent=2) + "\n")
         print(f"wrote {p}")
-        print("Add this to ~/.claude/settings.json (autoMode is not read from project settings):")
+        if not no_prose:
+            print("Add this to ~/.claude/settings.json (autoMode is not read from project settings;")
+            print("it then applies in every project, which is why the rule is inert without a note):")
+            print(json.dumps({"autoMode": auto_mode_block()}, indent=2))
+    if print_auto_mode:
         print(json.dumps({"autoMode": auto_mode_block()}, indent=2))
-    if a.settings_json:
-        s = {"hooks": hook_entries(layers)}
-        if not a.no_prose:
-            s["autoMode"] = auto_mode_block()
-        Path(a.settings_json).write_text(json.dumps(s, indent=2) + "\n")
-        print(f"wrote {a.settings_json}")
-    if a.print_auto_mode:
-        print(json.dumps({"autoMode": auto_mode_block()}, indent=2))
+
+
+def add_arguments(ap) -> None:
+    """Shared option set, so the CLI subcommand and the module entry agree."""
+    ap.add_argument("--settings-json", help="write one settings file (hooks and autoMode) for `claude --settings`")
+    ap.add_argument("--project", help="merge the hook entries into <project>/.claude/settings.json")
+    ap.add_argument("--layers", default="pre,post,prompt",
+                    help="comma-separated subset of prompt, pre and post (default: all three)")
+    ap.add_argument("--no-prose", action="store_true", help="omit the autoMode rule")
+    ap.add_argument("--print-auto-mode", action="store_true", help="print the autoMode block as JSON")
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    add_arguments(ap)
+    a = ap.parse_args()
+    run_install(project=a.project, settings_json=a.settings_json,
+                layers=tuple(x for x in a.layers.split(",") if x),
+                no_prose=a.no_prose, print_auto_mode=a.print_auto_mode)
 
 
 if __name__ == "__main__":

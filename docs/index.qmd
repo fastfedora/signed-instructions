@@ -70,7 +70,7 @@ Once a block verifies on the command line, install the hooks into a project so C
 permission decision sees the manifest:
 
 ```bash
-uv run python -m sib.hooks.claude_code.install --settings-json sib-settings.json
+uv run sib install claude-code --settings-json sib-settings.json
 claude --settings sib-settings.json
 ```
 
