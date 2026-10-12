@@ -149,8 +149,8 @@ Install the SIB hooks into an agent harness. Takes the harness as a positional a
   settings.
 
 `--layers LIST`
-: Comma-separated subset of `prompt`, `pre` and `post` (default: all three). Use it to run the
-  classifier note without the PreToolUse gate, or the gate alone.
+: Comma-separated subset of `prompt` and `post` (default: both). Use it to run the classifier note
+  without the prompt-time model note, or the reverse.
 
 `--no-prose`
 : Omit the autoMode rule.

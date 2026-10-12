@@ -20,12 +20,16 @@ Adoption in a harness comes down to:
 
 3. **Hand the manifest to the classifier on a channel the model cannot write to.** The manifest is
    a structured input to whatever decides permissions, never text placed in the model's context.
-   If the harness's classifier has no such channel, gate the action in the harness before the
-   classifier sees it, the way the Claude Code PreToolUse hook does.
 
-The guarantee the design offers is the third step. A note the model could have written is only as
-good as the classifier's ability to tell it apart from a fake, which is why Claude Code's
+Everything the design offers rests on the third step. A note the model could have written is only
+as good as the classifier's ability to tell it apart from a fake, which is why Claude Code's
 `classifierContext` counts as a channel and its `additionalContext` does not.
+
+A harness whose classifier has no such channel is one where SIB can report but not inform the
+decision. The verifier still runs and the manifest still records who signed what, which is worth
+having for the audit trail, but nothing binds the classifier to it. Getting past that is what the
+[Codex](#codex) plan is for, and what the untested in-process Agent SDK path below might offer
+without a patch.
 
 
 ## What the Library Exposes
@@ -44,9 +48,9 @@ good as the classifier's ability to tell it apart from a fake, which is why Clau
 `sib.manifest.render_classifier_note(manifest)`
 : The manifest as a short note for a classifier that takes text, under 2,000 characters.
 
-`sib.classifier.classify(policy, manifest, tool_call, backend=...)`
-: The reference classifier, if the harness wants one; see
-  [Permission Classifier](classifier.qmd).
+`sib.classifier.load_policy_text()`
+: The reference policy text to give the harness's own classifier; see
+  [Permission Classifier](classifier.qmd). SIB ships no classifier.
 
 A harness that verifies from a working directory can read `CLAUDE.md`, `AGENTS.md` or whatever
 instruction file it uses, and any message text it holds:
@@ -107,9 +111,9 @@ pre-existing auto-approver. What is known from the Phase 0 feasibility check:
 
 - The `workspace-write` sandbox is a real boundary. A network call to the release service, or a
   write outside the workspace and the temp directories, is an escalation the reviewer must judge,
-  whatever command shape reached it. This is how the gated action is defined there, not by a
-  command pattern: Codex's execpolicy rules are prefix matches with the same alternative-invocation
-  gap as a regex.
+  whatever command shape reached it. That boundary, not a command pattern, is what decides which
+  actions reach the reviewer: Codex's execpolicy rules are prefix matches, with the
+  alternative-invocation gap any pattern match has.
 
 - Project hooks in `.codex/hooks.json` fire under `codex exec` with
   `--dangerously-bypass-hook-trust`, and their `PreToolUse` input has the same shape as Claude
@@ -124,20 +128,23 @@ pre-existing auto-approver. What is known from the Phase 0 feasibility check:
 - Baseline there: an injected pre-authorization in `AGENTS.md` or the runbook was approved by the
   reviewer in 20 of 20 runs.
 
-The plan has two levels. Level 1 needs no patch: `PreToolUse` and `PermissionRequest` hooks run the
-verifier and deny when nothing verified covers the action, as in Claude Code. Level 2 patches the
-reviewer's context assembly so the manifest arrives as a structured field, behind a feature-flagged
-reviewer variant. Neither is implemented yet; the scenario runner can already drive Codex headless
-(`--harness codex`) for baselines.
+The plan is to patch the reviewer's context assembly so the manifest arrives as a structured field,
+behind a feature-flagged reviewer variant. That is the channel the third step asks for, and Codex
+is open source, so it can be demonstrated rather than requested. It is not implemented yet; the
+scenario runner can already drive Codex headless (`--harness codex`) for baselines.
 
 
 ## Claude Agent SDK
 
-The Agent SDK's `can_use_tool` callback is a harness-controlled structured channel: it receives the
-tool name and input and returns allow or deny. A small Python harness whose callback runs the
-verifier and the reference classifier with the manifest as structured input is the cleanest
-illustration of the third step, and it needs no patching. It is planned for Phase 5 as the
-reference adoption example, alongside an Inspect approver. Neither exists yet.
+The Agent SDK is Claude Code packaged as a library, running the same auto-mode classifier. Its
+hooks reference says that a note returned from an in-process TypeScript SDK callback may be weighed
+as user intent, which a note from a settings-file hook never is. If that holds, it is the one path
+where a verified instruction from someone other than the operator could inform the decision without
+a vendor change. It is untested, and testing it is the next decision point for the project.
+
+The SDK's `can_use_tool` callback is a separate, harness-controlled channel that receives the tool
+name and input and returns allow or deny. An adoption example built on it is planned for Phase 5,
+alongside an Inspect approver. Neither exists yet.
 
 
 ## HTTP Sidecar
