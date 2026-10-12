@@ -19,7 +19,6 @@ from ...nonce_store import NoopNonceStore
 from ...registry import Registry, default_mode
 from ...verify import verify_block
 
-POLICY_FILENAME = ".sib-policy.json"
 DEFAULT_POLICY = {"audience": None, "gated": [], "description": "no gated actions configured"}
 SEGMENT_SPLIT = re.compile(r"\s*(?:;|&&|\|\||\||\n)\s*")
 
@@ -44,51 +43,13 @@ def log(msg: str) -> None:
     print(f"sib-hook: {msg}", file=sys.stderr, flush=True)
 
 
-# ---------- policy ----------
+# ---------- harness identity ----------
 
-def load_policy(cwd: str | None) -> dict:
-    """`.sib-policy.json` from SIB_POLICY, else the project directory. In v1
-    the file may live in the repo, which an attacker can edit; Phase 3 moves
-    the gated class to user scope. Missing or unreadable → no gated actions,
-    which is fail-open for the gate but the classifier note still flows."""
-    p = os.environ.get("SIB_POLICY")
-    path = Path(p) if p else (Path(cwd or os.getcwd()) / POLICY_FILENAME)
-    try:
-        d = json.loads(path.read_text())
-        d.setdefault("gated", [])
-        d.setdefault("audience", None)
-        return d
-    except (OSError, json.JSONDecodeError):
-        return dict(DEFAULT_POLICY)
-
-
-def command_segments(cmd: str) -> list[str]:
-    out = []
-    for seg in SEGMENT_SPLIT.split(cmd or ""):
-        seg = seg.strip()
-        seg = re.sub(r"^(?:cd\s+\S+\s+&&\s*)", "", seg)
-        seg = re.sub(r"^(?:[A-Z_]+=\S+\s+)+", "", seg)
-        if seg:
-            out.append(seg)
-    return out
-
-
-def is_gated(policy: dict, tool_name: str | None, tool_input: dict | None) -> tuple[bool, str | None]:
-    """Deterministic pre-filter. A cost control, not a security boundary."""
-    for rule in policy.get("gated", []):
-        if rule.get("tool") and rule["tool"] != tool_name:
-            continue
-        rx = rule.get("segment_regex")
-        if tool_name == "Bash" and rx:
-            for seg in command_segments((tool_input or {}).get("command", "")):
-                if re.search(rx, seg):
-                    return True, rule.get("label") or rx
-        elif rule.get("input_regex"):
-            if re.search(rule["input_regex"], json.dumps(tool_input or {})):
-                return True, rule.get("label") or rule["input_regex"]
-        elif not rx and not rule.get("input_regex") and rule.get("tool") == tool_name:
-            return True, rule.get("label") or tool_name
-    return False, None
+def harness_audience() -> str | None:
+    """The audience this harness presents to the verifier, from SIB_AUDIENCE.
+    A block whose `aud` names a different deployment fails with
+    audience_mismatch. Harness configuration, never read from the repository."""
+    return os.environ.get("SIB_AUDIENCE") or None
 
 
 # ---------- session store ----------
@@ -192,44 +153,6 @@ def transcript_blocks(transcript_path: str | None, limit_bytes: int = 20_000_000
     return out
 
 
-def recent_activity(transcript_path: str | None, n: int = 8, tail: int = 240) -> list[dict]:
-    """Harness-recorded facts the classifier may need to check a condition in a
-    verified instruction (for example 'once the test suite passes'): the last
-    n tool calls with their result status and a short output tail. Observations,
-    not instructions; the policy says so. Best effort over the session JSONL."""
-    out: list[dict] = []
-    if not transcript_path:
-        return out
-    try:
-        lines = Path(transcript_path).read_text().splitlines()
-    except OSError:
-        return out
-    calls: dict[str, dict] = {}
-    order: list[str] = []
-    for line in lines:
-        try:
-            d = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        content = (d.get("message") or {}).get("content")
-        if d.get("type") not in ("user", "assistant") or not isinstance(content, list):
-            continue
-        for b in content:
-            if not isinstance(b, dict):
-                continue
-            if b.get("type") == "tool_use":
-                inp = b.get("input") or {}
-                what = inp.get("command") or inp.get("file_path") or inp.get("pattern") or json.dumps(inp)[:120]
-                calls[b.get("id")] = {"tool": b.get("name"), "input": str(what)[:200], "result": None, "is_error": None}
-                order.append(b.get("id"))
-            elif b.get("type") == "tool_result" and b.get("tool_use_id") in calls:
-                c = b.get("content")
-                text = c if isinstance(c, str) else " ".join(x.get("text", "") for x in c if isinstance(x, dict)) if isinstance(c, list) else ""
-                calls[b["tool_use_id"]]["result"] = text[-tail:]
-                calls[b["tool_use_id"]]["is_error"] = bool(b.get("is_error"))
-    return [calls[i] for i in order[-n:]]
-
-
 def gather_candidates(event: dict) -> list[tuple[Block, dict]]:
     cwd = event.get("cwd")
     cands = load_session_blocks(event.get("session_id"))
@@ -247,11 +170,11 @@ def gather_candidates(event: dict) -> list[tuple[Block, dict]]:
 
 # ---------- manifest ----------
 
-def assemble_manifest(event: dict, policy: dict) -> dict:
+def assemble_manifest(event: dict) -> dict:
     """Verifier error → manifest with zero verified spans and an error field (fail closed on authority).
     The mode is SIB_MODE when set, else enforced once a WebAuthn key is enrolled (NF-4)."""
     mode = os.environ.get("SIB_MODE") or "dev"
-    audience = policy.get("audience")
+    audience = harness_audience()
     session_id, tool_use_id = event.get("session_id"), event.get("tool_use_id")
     try:
         registry = Registry()
@@ -290,26 +213,18 @@ def audit(event: dict, record: dict) -> None:
 
 # ---------- fail-closed wrapper ----------
 
-def run_hook(handler, deny_reason: str = "SIB hook failed; gated actions are denied until it is fixed"):
-    """Any uncaught exception denies a gated call and lets a non-gated call
-    proceed with a logged warning. Claude Code's own default on hook error is
-    to proceed, so the hook must never rely on it."""
+def run_hook(handler):
+    """The hooks observe and report; they take no permission decision, so an
+    uncaught exception is logged and the call proceeds. The cost of a failure
+    is that the classifier receives no provenance note for that call and
+    therefore learns nothing, which the note's wording makes safe: absence of
+    a note is not a claim that anything is signed."""
     t0 = time.time()
     event = read_event()
     try:
-        out = handler(event, t0)
-        emit(out)
-        sys.exit(0)
+        emit(handler(event, t0))
     except SystemExit:
         raise
     except Exception:  # noqa: BLE001
         log("uncaught exception:\n" + traceback.format_exc())
-        try:
-            policy = load_policy(event.get("cwd"))
-            gated, _ = is_gated(policy, event.get("tool_name"), event.get("tool_input"))
-        except Exception:  # noqa: BLE001
-            gated = True
-        if gated and event.get("hook_event_name") == "PreToolUse":
-            emit({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
-                                         "permissionDecisionReason": deny_reason}})
-        sys.exit(0)
+    sys.exit(0)

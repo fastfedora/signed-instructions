@@ -169,7 +169,7 @@ def test_install_writes_one_settings_file(sib_home, tmp_path):
     rc, so, se = run(["install", "claude-code", "--settings-json", str(out)])
     assert rc == 0
     d = json.loads(out.read_text())
-    assert sorted(d["hooks"]) == ["PostToolUse", "PreToolUse", "UserPromptSubmit"]
+    assert sorted(d["hooks"]) == ["PostToolUse", "UserPromptSubmit"]
     # the autoMode rule must be inert where no provenance note is delivered
     assert "does not apply at all" in d["autoMode"]["soft_deny"][1]
 
@@ -179,7 +179,7 @@ def test_install_into_a_project(sib_home, tmp_path):
     rc, so, se = run(["install", "claude-code", "--project", str(repo)])
     assert rc == 0
     d = json.loads((repo / ".claude" / "settings.json").read_text())
-    assert "PreToolUse" in d["hooks"] and "autoMode" not in d   # project settings never carry autoMode
+    assert "PostToolUse" in d["hooks"] and "autoMode" not in d   # project settings never carry autoMode
     assert "~/.claude/settings.json" in so
 
 

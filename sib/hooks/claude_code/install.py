@@ -31,15 +31,13 @@ def python_exe() -> str:
     return sys.executable
 
 
-def hook_entries(layers=("pre", "post", "prompt")) -> dict:
+def hook_entries(layers=("post", "prompt")) -> dict:
     py = python_exe()
     def h(mod):
         return {"type": "command", "command": f"{py} -m sib.hooks.claude_code.{mod}", "timeout": HOOK_TIMEOUT}
     hooks = {}
     if "prompt" in layers:
         hooks["UserPromptSubmit"] = [{"hooks": [h("userprompt")]}]
-    if "pre" in layers:
-        hooks["PreToolUse"] = [{"matcher": "", "hooks": [h("pretooluse")]}]
     if "post" in layers:
         hooks["PostToolUse"] = [{"matcher": "", "hooks": [h("posttooluse")]}]
     return hooks
@@ -49,7 +47,7 @@ def auto_mode_block(with_rule=True) -> dict:
     return {"soft_deny": ["$defaults", AUTO_MODE_SIB_RULE]} if with_rule else {}
 
 
-def run_install(project=None, settings_json=None, layers=("pre", "post", "prompt"),
+def run_install(project=None, settings_json=None, layers=("post", "prompt"),
                 no_prose=False, print_auto_mode=False) -> None:
     """Shared by `sib install claude-code` and the module entry point."""
     if not (project or settings_json or print_auto_mode):
@@ -80,8 +78,8 @@ def add_arguments(ap) -> None:
     """Shared option set, so the CLI subcommand and the module entry agree."""
     ap.add_argument("--settings-json", help="write one settings file (hooks and autoMode) for `claude --settings`")
     ap.add_argument("--project", help="merge the hook entries into <project>/.claude/settings.json")
-    ap.add_argument("--layers", default="pre,post,prompt",
-                    help="comma-separated subset of prompt, pre and post (default: all three)")
+    ap.add_argument("--layers", default="post,prompt",
+                    help="comma-separated subset of prompt and post (default: both)")
     ap.add_argument("--no-prose", action="store_true", help="omit the autoMode rule")
     ap.add_argument("--print-auto-mode", action="store_true", help="print the autoMode block as JSON")
 
