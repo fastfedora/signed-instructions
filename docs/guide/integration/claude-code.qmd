@@ -76,10 +76,17 @@ environment that has `sib` installed. The options are:
 Each hook entry has a 60-second timeout. The classifier's own deadline (`SIB_CLASSIFIER_TIMEOUT`,
 45 seconds by default) sits below it, so a deny is emitted before Claude Code gives up on the hook.
 
-::: {.callout-note}
+::: {.callout-warning}
 Claude Code reads `autoMode` only from user settings (`~/.claude/settings.json`), managed settings
-or the `--settings` flag, never from a project's `.claude/settings.json`. The installer therefore
-prints the block for you to add by hand.
+or the `--settings` flag, never from a project's `.claude/settings.json`. That exclusion is
+deliberate: a checked-in repository must not be able to grant itself classifier rules.
+
+The consequence is that the two halves of the install scope differently. The hooks can live in one
+project; the rule cannot. A rule in your user settings is read in every project, including projects
+with no SIB hooks and therefore no provenance note. The rule shipped by the installer is written to
+be inert in that case, applying only when a note is present, so adding SIB to one repository does
+not change how the classifier treats your others. If you write your own rule, keep that condition,
+or scope both halves to a single invocation with `--settings`.
 :::
 
 
