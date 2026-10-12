@@ -215,6 +215,12 @@ def cmd_inspect(a):
         print("signature:", parts[-1][:32] + "...")
 
 
+def cmd_install_codex(a):
+    from .codex.install import run_install
+    run_install(config=a.config, audience=a.audience, sib_path=a.sib_path, home=a.home,
+                print_only=a.print_only, assume_yes=a.assume_yes)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="sib", description="Signed Instruction Blocks")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -251,6 +257,11 @@ def main(argv=None):
     v.add_argument("--enforced", action="store_true", help="enforced mode (the default once a passkey is enrolled)")
     v.add_argument("--dev", action="store_true", help="dev mode (the default until a passkey is enrolled)")
     v.set_defaults(fn=cmd_verify)
+    n = sub.add_parser("install", help="install SIB into an agent harness")
+    harness = n.add_subparsers(dest="harness", required=True)
+    cx = harness.add_parser("codex", help="auto-review policy that makes the reviewer verify signatures")
+    from .codex.install import add_arguments as _cx_args
+    _cx_args(cx); cx.set_defaults(fn=cmd_install_codex)
     i = sub.add_parser("inspect", help="decode blocks without verifying"); i.add_argument("file"); i.set_defaults(fn=cmd_inspect)
     a = ap.parse_args(argv)
     if a.cmd == "keygen" and a.enroll and not a.signer:
