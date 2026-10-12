@@ -57,14 +57,6 @@ Permission Classifier
   structured input. Claude Code's auto mode has one built in; the reference implementation also
   ships its own.
 
-Gate
-: The hook-side check that denies a policy-covered action when no verified block covers it. It is
-  the guarantee; the classifier is the judgment.
-
-Gated Action
-: An action the gate policy names as requiring human authorization, such as a deploy. The policy
-  is harness configuration and lives outside the repository.
-
 Origin
 : Where a block was found: the user's prompt, the project's instruction files, a tool result, or
   an assistant message. Origin labels tell the classifier who put the text in front of the agent.
@@ -92,12 +84,13 @@ Unsigned text confers nothing
   can all say "deploys are pre-authorized". None of it is an instruction from a human unless it is
   inside a verified block.
 
-Fail closed on authority
-: When the verifier, the registry, the session store or the classifier fails, a gated action is
-  denied and the reason names the failure. A non-gated action proceeds. The hook never relies on
-  the harness's own default, which is to proceed.
+Absence is not a claim
+: When the verifier or the session store fails, no note is delivered and the hooks take no
+  decision. That is safe because the note never says an action is permitted; it says which
+  instructions are signed. Its absence tells the classifier nothing, rather than telling it
+  something false.
 
-Two channels to the classifier
-: In Claude Code the manifest reaches the auto-mode classifier as a short note through the
-  PostToolUse hook's `classifierContext` field, and the gate runs in the PreToolUse hook before the
-  classifier is consulted. Either layer stops the injected-authorization attack on its own.
+Report, do not decide
+: SIB verifies signatures and reports what it found. It takes no permission decision. In Claude
+  Code the manifest reaches the auto-mode classifier as a short note through the PostToolUse
+  hook's `classifierContext` field, and that classifier decides what may run.
