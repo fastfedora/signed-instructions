@@ -11,8 +11,8 @@ it.
 
 ## Schema
 
-Manifest version 0.1, as written by the PreToolUse hook for a session whose `CLAUDE.md` carries the
-block from [Blocks and Signatures](blocks.qmd):
+Manifest version 0.1, as written by the PostToolUse hook for a session whose `CLAUDE.md` carries
+the block from [Blocks and Signatures](blocks.qmd):
 
 ```json
 {
@@ -108,9 +108,9 @@ places, in this order, and de-duplicate identical blocks by their signature:
   transcript format is undocumented, so anything unreadable is skipped; the scan can only add
   candidates, never remove one.
 
-The origin does not change how a block is verified. It exists so that a denial can say "the block
-in `docs/RUNBOOK.md` did not verify" and so that a later phase can label agent-authored text by
-its source.
+The origin does not change how a block is verified. It exists so that a classifier can say "the
+block in `docs/RUNBOOK.md` did not verify" and so that a later phase can label agent-authored text
+by its source.
 
 
 ## The Classifier Note
@@ -152,14 +152,13 @@ The note follows the rules Claude Code sets for the field and a few of its own:
 ## Audit Records
 
 Each hook appends one record per event to `SIB_HOME/sessions/<session_id>/audit.jsonl`, and to the
-file named by `SIB_AUDIT_FILE` when set. A PreToolUse record for a call that was not gated:
+file named by `SIB_AUDIT_FILE` when set. A PostToolUse record:
 
 ```json
-{"ts": 1789308424.337186, "hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_use_id": "toolu_01", "gated": false, "verifier_ms": 3.6, "verified_span_ids": ["sib-1"], "spans": 1}
+{"ts": 1791807750.8554728, "hook_event_name": "PostToolUse", "tool_name": "Bash", "tool_use_id": "toolu_01", "classifier_note_chars": 481, "verified_span_ids": ["sib-1"], "hook_ms": 3.6}
 ```
 
-Gated calls add `gated_by`, `decision`, `why` and, when the classifier ran, its full decision with
-latency. PostToolUse records carry the note's length; UserPromptSubmit records the number of blocks
-stored. The manifest itself is written to `manifest.json` in the same directory on every call, so
-the last one always reflects the current session. Recording, storing and analyzing these files is
-the harness's responsibility; the hooks only write them.
+UserPromptSubmit records the number of blocks stored and whether a model-facing note was returned.
+The manifest itself is written to `manifest.json` in the same directory on every call, so the last
+one always reflects the current session. Recording, storing and analyzing these files is the
+harness's responsibility; the hooks only write them.
