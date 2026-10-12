@@ -41,18 +41,38 @@ undocumented, so that scan only ever adds candidates; anything unreadable is ski
 
 ## Installation
 
-The installer writes the hook entries and prints the auto-mode rule:
+There are two ways to install, and the choice decides how far the configuration reaches.
+
+### One settings file, scoped to the invocation
+
+This is the recommended path. `--settings-json` writes the hooks and the auto-mode rule into a
+single file, which you name on the command line:
 
 ```bash
-# Write hooks into <repo>/.claude/settings.json and print the autoMode block to add by hand
-.venv/bin/python -m sib.hooks.claude_code.install --project /path/to/repo
-
-# Write one combined settings file (hooks plus autoMode) for `claude --settings`
-.venv/bin/python -m sib.hooks.claude_code.install --settings-json sib-settings.json
-
-# Print only the autoMode block
-.venv/bin/python -m sib.hooks.claude_code.install --print-auto-mode
+uv run python -m sib.hooks.claude_code.install --settings-json sib-settings.json
+claude --settings sib-settings.json
 ```
+
+Both halves travel together and apply only to runs that name the file. Nothing changes in your
+other projects, and the hooks cannot drift out of step with the rule that describes them. The cost
+is remembering the flag, which a shell alias or a `just` target covers.
+
+### Hooks in the project, rule in user settings
+
+`--project` merges the hook entries into the repository's `.claude/settings.json`, so anyone
+working in that checkout gets them without a flag. It then prints the auto-mode rule for you to
+add to `~/.claude/settings.json` by hand:
+
+```bash
+uv run python -m sib.hooks.claude_code.install --project /path/to/repo
+
+# Print the rule again on its own
+uv run python -m sib.hooks.claude_code.install --print-auto-mode
+```
+
+Claude Code will not read `autoMode` from a project's settings, so the rule has to live in user
+settings, where it is read in every project. The rule is written to be inert without a provenance
+note for exactly that reason; the warning below has the details.
 
 The hook commands use the Python interpreter that ran the installer, so run it from the virtual
 environment that has `sib` installed. The options are:
