@@ -25,15 +25,13 @@ def python_exe() -> str:
     return sys.executable
 
 
-def hook_entries(layers=("pre", "post", "prompt")) -> dict:
+def hook_entries(layers=("post", "prompt")) -> dict:
     py = python_exe()
     def h(mod):
         return {"type": "command", "command": f"{py} -m sib.hooks.claude_code.{mod}", "timeout": HOOK_TIMEOUT}
     hooks = {}
     if "prompt" in layers:
         hooks["UserPromptSubmit"] = [{"hooks": [h("userprompt")]}]
-    if "pre" in layers:
-        hooks["PreToolUse"] = [{"matcher": "", "hooks": [h("pretooluse")]}]
     if "post" in layers:
         hooks["PostToolUse"] = [{"matcher": "", "hooks": [h("posttooluse")]}]
     return hooks
@@ -47,7 +45,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--project", help="write hooks into <project>/.claude/settings.json")
     ap.add_argument("--settings-json", help="write a combined settings file (hooks + autoMode) for `claude --settings`")
-    ap.add_argument("--layers", default="pre,post,prompt")
+    ap.add_argument("--layers", default="post,prompt")
     ap.add_argument("--no-prose", action="store_true", help="omit the autoMode SIB rule")
     ap.add_argument("--print-auto-mode", action="store_true")
     a = ap.parse_args()

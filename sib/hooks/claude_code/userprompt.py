@@ -3,7 +3,7 @@
 which human-signed instructions are verified at this point. That context is
 for the model's benefit only; the classifier's channel is the PostToolUse
 note. Never blocks the prompt."""
-from .common import run_hook, store_prompt_blocks, audit, load_policy, assemble_manifest, write_manifest
+from .common import run_hook, store_prompt_blocks, audit, assemble_manifest, write_manifest
 
 
 def model_note(manifest: dict) -> str | None:
@@ -25,8 +25,7 @@ def model_note(manifest: dict) -> str | None:
 
 def handle(event, t0):
     n = store_prompt_blocks(event.get("session_id"), event.get("user_prompt") or event.get("prompt") or "")
-    policy = load_policy(event.get("cwd"))
-    manifest = assemble_manifest(event, policy)
+    manifest = assemble_manifest(event)
     write_manifest(event, manifest)
     note = model_note(manifest)
     audit(event, {"stored_blocks": n, "verified_span_ids": manifest["verified_span_ids"], "model_note": bool(note)})
