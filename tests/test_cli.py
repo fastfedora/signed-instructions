@@ -2,6 +2,7 @@
 import datetime as dt
 import subprocess
 import sys
+import tomllib
 
 import pytest
 
@@ -174,19 +175,57 @@ def test_install_codex_prints_a_usable_fragment(sib_home, tmp_path):
     assert "appended to" not in so
 
 
-def test_install_codex_writes_and_refuses_to_clobber(sib_home, tmp_path):
+def test_install_codex_writes_and_merges(sib_home, tmp_path):
     cfg = tmp_path / "config.toml"
     cfg.write_text("model = \"gpt-6\"\n")
-    rc, so, se = run(["install", "codex", "--audience", "a/b", "--config", str(cfg),
-                      "--home", str(tmp_path / "sib"), "--sib-path", "/usr/bin/true", "--yes"])
-    assert rc == 0 and "appended to" in so
+    args = ["install", "codex", "--audience", "a/b", "--config", str(cfg),
+            "--home", str(tmp_path / "sib"), "--sib-path", "/usr/bin/true", "--yes"]
+    rc, so, se = run(args)
+    assert rc == 0 and "wrote" in so
     text = cfg.read_text()
     assert text.startswith("model = ") and "[auto_review]" in text
-    assert 'approvals_reviewer = "auto_review"' in text       # --yes answers both questions yes
+    assert 'approvals_reviewer = "auto_review"' in text       # the default answer is yes
+    # a second run replaces our keys rather than refusing, and the result is still one valid file
+    rc, so, se = run(args)
+    assert rc == 0 and "wrote" in so
+    d = tomllib.loads(cfg.read_text())
+    assert d["model"] == "gpt-6" and d["approvals_reviewer"] == "auto_review"
+    assert cfg.read_text().count("extra_policy =") == 1
+    assert (tmp_path / "config.toml.sib-bak").exists()        # the previous file is kept
+
+
+def test_install_codex_leaves_other_settings_alone(sib_home, tmp_path):
+    cfg = tmp_path / "config.toml"
+    cfg.write_text("model = \"gpt-6\"\n\n[auto_review]\nignore_rules = true\n\n"
+                   "[mcp_servers.fs]\ncommand = \"npx\"\n")
     rc, so, se = run(["install", "codex", "--audience", "a/b", "--config", str(cfg),
                       "--home", str(tmp_path / "sib"), "--sib-path", "/usr/bin/true", "--yes"])
-    assert rc != 0 and "already has an [auto_review] section" in se
+    assert rc == 0
+    d = tomllib.loads(cfg.read_text())
+    assert d["auto_review"]["ignore_rules"] is True           # a neighbouring key in our own table
+    assert "extra_policy" in d["auto_review"]
+    assert d["mcp_servers"]["fs"]["command"] == "npx"         # a later table is not swallowed
 
+
+def test_install_codex_keeps_another_reviewer_by_default(sib_home, tmp_path):
+    cfg = tmp_path / "config.toml"
+    cfg.write_text("approvals_reviewer = \"none\"\n")
+    rc, so, se = run(["install", "codex", "--audience", "a/b", "--config", str(cfg),
+                      "--home", str(tmp_path / "sib"), "--sib-path", "/usr/bin/true"])
+    assert rc == 0
+    d = tomllib.loads(cfg.read_text())
+    assert d["approvals_reviewer"] == "none"                  # declining leaves the user's choice
+    assert "extra_policy" in d["auto_review"]                 # the policy still lands
+    assert "--approve-for-me" in se                           # and says how to enable it per run
+
+
+def test_install_codex_asks_before_replacing_our_own_keys(sib_home, tmp_path):
+    cfg = tmp_path / "config.toml"
+    cfg.write_text("[auto_review]\nextra_policy = \"mine\"\n")
+    rc, so, se = run(["install", "codex", "--audience", "a/b", "--config", str(cfg),
+                      "--home", str(tmp_path / "sib"), "--sib-path", "/usr/bin/true"])
+    assert rc != 0 and "left unchanged" in se
+    assert cfg.read_text() == "[auto_review]\nextra_policy = \"mine\"\n"
 
 def test_install_codex_needs_an_audience(sib_home, monkeypatch):
     monkeypatch.delenv("SIB_AUDIENCE", raising=False)

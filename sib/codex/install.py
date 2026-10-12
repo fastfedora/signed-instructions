@@ -11,8 +11,10 @@ Codex reviews escalated actions with an LLM subagent that scores
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import sys
+import tomllib
 from pathlib import Path
 
 from . import EXTRA_POLICY_PATH, TEMPLATE_PATH, TEMPLATE_SOURCE_COMMIT
@@ -35,18 +37,69 @@ def render_extra_policy(sib_path: str, home: Path, audience: str) -> str:
                 .replace("{SIB_AUDIENCE}", audience))
 
 
-def build_fragment(sib_path: str, home: Path, audience: str, set_reviewer: bool) -> str:
+def build_auto_review_lines(sib_path: str, home: Path, audience: str) -> list[str]:
+    """The keys this installer owns, as lines to place inside [auto_review]."""
     extra = render_extra_policy(sib_path, home, audience)
-    lines = ["# Signed Instruction Blocks: the reviewer verifies signatures itself.",
-             f"# Written by `sib install codex`. Audience {audience}; registry {home}."]
-    if set_reviewer:
-        lines += ["", 'approvals_reviewer = "auto_review"']
-    lines += ["", "[auto_review]",
-              "# Pinned only because auto_review.extra_policy is dropped with the catalog",
-              f"# template (openai/codex#50309). Codex's own template at {TEMPLATE_SOURCE_COMMIT}.",
-              "experimental_policy_template = " + toml_literal(TEMPLATE_PATH.read_text()),
-              "", "extra_policy = " + toml_literal(extra), ""]
-    return "\n".join(lines)
+    return ["# Signed Instruction Blocks, written by `sib install codex`.",
+            f"# Audience {audience}; registry {home}.",
+            "# The template is pinned only because auto_review.extra_policy is dropped with the",
+            f"# catalog template (openai/codex#50309). Codex's own template at {TEMPLATE_SOURCE_COMMIT}.",
+            "experimental_policy_template = " + toml_literal(TEMPLATE_PATH.read_text()),
+            "", "extra_policy = " + toml_literal(extra)]
+
+
+OUR_KEYS = ("experimental_policy_template", "extra_policy")
+
+
+def _section_span(text: str, header: str) -> tuple[int, int] | None:
+    """Character span of a top-level table's body, from its header to the next one."""
+    m = re.search(rf"^\[{re.escape(header)}\]\s*$", text, re.M)
+    if not m:
+        return None
+    nxt = re.search(r"^\[", text[m.end():], re.M)
+    return m.end(), (m.end() + nxt.start()) if nxt else len(text)
+
+
+def _drop_key(body: str, key: str) -> str:
+    """Remove `key = ...` from a table body, including a multi-line literal value."""
+    m = re.search(rf"^[ \t]*{re.escape(key)}[ \t]*=[ \t]*('''|\"\"\")?", body, re.M)
+    if not m:
+        return body
+    if m.group(1):
+        close = body.find(m.group(1), m.end())
+        end = (body.find("\n", close + 3) + 1) if close != -1 else len(body)
+    else:
+        nl = body.find("\n", m.end())
+        end = (nl + 1) if nl != -1 else len(body)
+    return body[: m.start()] + body[end:]
+
+
+def merge(text: str, auto_review_lines: list[str], reviewer: str | None) -> str:
+    """Add our keys to an existing config, leaving every other setting alone."""
+    if reviewer is not None:
+        line = f'approvals_reviewer = "{reviewer}"'
+        existing = re.search(r"^approvals_reviewer[ \t]*=.*$", text, re.M)
+        first_table = re.search(r"^\[", text, re.M)
+        if existing and (not first_table or existing.start() < first_table.start()):
+            text = text[: existing.start()] + line + text[existing.end():]
+        else:
+            at = first_table.start() if first_table else len(text)
+            prefix = text[:at]
+            if prefix and not prefix.endswith("\n"):
+                prefix += "\n"
+            text = prefix + line + "\n\n" + text[at:]
+
+    block = "\n".join(auto_review_lines).rstrip("\n") + "\n"
+    span = _section_span(text, "auto_review")
+    if span is None:
+        joiner = "" if not text or text.endswith("\n\n") else ("\n" if text.endswith("\n") else "\n\n")
+        return text + joiner + "[auto_review]\n" + block
+    start, end = span
+    body = text[start:end]
+    for key in OUR_KEYS:
+        body = _drop_key(body, key)
+    body = body.lstrip("\n")
+    return text[:start] + "\n" + block + ("\n" + body if body.strip() else "") + text[end:]
 
 
 def _ask(question: str, default: bool) -> bool:
@@ -75,9 +128,6 @@ def check_environment(sib_path: str, home: Path) -> list[str]:
                             f"write there can enroll its own key. Keep SIB_HOME outside any repository.")
     except OSError:
         pass
-    if not (home / "registry.json").exists():
-        warnings.append(f"No registry at {home}/registry.json yet. Run `sib keygen --signer <you> "
-                        f"--enroll`, or `sib enroll`, before the reviewer will verify anything.")
     return warnings
 
 
@@ -92,32 +142,62 @@ def run_install(config: str | None = None, audience: str | None = None, sib_path
     for w in check_environment(resolved_sib, resolved_home):
         print(f"warning: {w}\n", file=sys.stderr)
 
-    set_reviewer = assume_yes or _ask(
-        "Set approvals_reviewer = \"auto_review\" in the config? Say no to enable it per run "
-        "with `codex exec --approve-for-me` or `-c approvals_reviewer=\"auto_review\"`.", default=False)
-    fragment = build_fragment(resolved_sib, resolved_home, audience, set_reviewer)
-
     target = Path(config).expanduser() if config else DEFAULT_CONFIG
+    text = target.read_text() if target.exists() else ""
+    try:
+        current = tomllib.loads(text) if text.strip() else {}
+    except tomllib.TOMLDecodeError as e:
+        raise SystemExit(f"{target} is not valid TOML ({e}); fix it or use --print")
+
+    # approvals_reviewer: default to enabling it, but never quietly discard a
+    # different choice the user already made.
+    existing_reviewer = current.get("approvals_reviewer")
+    reviewer: str | None
+    if existing_reviewer == "auto_review":
+        reviewer = None
+        print(f"# approvals_reviewer is already \"auto_review\" in {target}.", file=sys.stderr)
+    elif existing_reviewer is None:
+        reviewer = "auto_review" if (assume_yes or _ask(
+            'Set approvals_reviewer = "auto_review"? Say no to enable it per run with '
+            '`codex exec --approve-for-me`.', default=True)) else None
+    else:
+        reviewer = "auto_review" if _ask(
+            f'approvals_reviewer is currently "{existing_reviewer}". Replace it with "auto_review"? '
+            f'Saying no keeps your setting; enable the reviewer per run instead.', default=False) else None
+
+    existing_ours = [k for k in OUR_KEYS if k in (current.get("auto_review") or {})]
+    if existing_ours and not (assume_yes or _ask(
+            f"{target} already sets {' and '.join(existing_ours)} under [auto_review]. Replace "
+            f"{'them' if len(existing_ours) > 1 else 'it'}?", default=False)):
+        raise SystemExit("left unchanged; use --print to see what would have been written")
+
+    lines = build_auto_review_lines(resolved_sib, resolved_home, audience)
+    merged = merge(text, lines, reviewer)
+
     write = False
     if not print_only:
-        write = assume_yes or _ask(f"Append this configuration to {target}?", default=False)
+        write = assume_yes or _ask(f"Write this configuration to {target}?", default=True)
     if write:
         target.parent.mkdir(parents=True, exist_ok=True)
-        existing = target.read_text() if target.exists() else ""
-        if "[auto_review]" in existing:
-            raise SystemExit(f"{target} already has an [auto_review] section. Merge by hand, or pass "
-                             f"--print and edit it yourself.")
-        with target.open("a") as f:
-            f.write(("\n" if existing and not existing.endswith("\n") else "") + "\n" + fragment)
-        print(f"appended to {target}")
+        if text:
+            backup = target.with_suffix(target.suffix + ".sib-bak")
+            backup.write_text(text)
+            print(f"backed up {target} to {backup}", file=sys.stderr)
+        target.write_text(merged)
+        print(f"wrote {target}")
     else:
-        print(fragment)
+        print(merged if not text else "\n".join(["[auto_review]", *lines]))
         if not print_only:
-            print(f"# Not written. Add the above to {target}, or a project `.codex/config.toml`.",
+            print(f"# Not written. Merge the above into {target}, or a project `.codex/config.toml`.",
                   file=sys.stderr)
 
-    if not set_reviewer:
-        print("# Enable the reviewer per run: codex exec --approve-for-me", file=sys.stderr)
+    if reviewer is None and existing_reviewer != "auto_review":
+        print("# The reviewer is not enabled in the config. Per run: codex exec --approve-for-me",
+              file=sys.stderr)
+    if not (resolved_home / "registry.json").exists():
+        print(f"# No keys enrolled yet at {resolved_home}. Until `sib keygen --signer <you> --enroll`\n"
+              f"# runs, every block verifies as unknown_signer, which is safe: nothing is authorized.",
+              file=sys.stderr)
     print("# SIB scores authorization, not risk. A deploy or release is only refused when your own\n"
           "# policy says that class of action needs authorization; add that rule under [auto_review].",
           file=sys.stderr)
