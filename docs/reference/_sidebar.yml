@@ -52,23 +52,23 @@ website:
       - section: classifier
         href: reference/classifier.qmd
         contents:
-        - text: classify
-          href: reference/classifier.qmd#classify
+        - text: load_policy_text
+          href: reference/classifier.qmd#load_policy_text
       - section: hooks
         href: reference/hooks.qmd
         contents:
         - text: assemble_manifest
           href: reference/hooks.qmd#assemble_manifest
-        - text: is_gated
-          href: reference/hooks.qmd#is_gated
-        - text: load_policy
-          href: reference/hooks.qmd#load_policy
-        - text: recent_activity
-          href: reference/hooks.qmd#recent_activity
+        - text: harness_audience
+          href: reference/hooks.qmd#harness_audience
         - text: run_hook
           href: reference/hooks.qmd#run_hook
         - text: transcript_blocks
           href: reference/hooks.qmd#transcript_blocks
+        - text: add_arguments
+          href: reference/hooks.qmd#add_arguments
+        - text: run_install
+          href: reference/hooks.qmd#run_install
       - section: cli
         href: reference/cli.qmd
         contents:
