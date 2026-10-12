@@ -215,11 +215,17 @@ def cmd_inspect(a):
         print("signature:", parts[-1][:32] + "...")
 
 
-def cmd_install(a):
+def cmd_install_claude_code(a):
     from .hooks.claude_code.install import run_install
     run_install(project=a.project, settings_json=a.settings_json,
                 layers=tuple(x for x in a.layers.split(",") if x),
                 no_prose=a.no_prose, print_auto_mode=a.print_auto_mode)
+
+
+def cmd_install_codex(a):
+    from .codex.install import run_install
+    run_install(config=a.config, audience=a.audience, sib_path=a.sib_path, home=a.home,
+                print_only=a.print_only, assume_yes=a.assume_yes)
 
 
 def main(argv=None):
@@ -258,11 +264,14 @@ def main(argv=None):
     v.add_argument("--enforced", action="store_true", help="enforced mode (the default once a passkey is enrolled)")
     v.add_argument("--dev", action="store_true", help="dev mode (the default until a passkey is enrolled)")
     v.set_defaults(fn=cmd_verify)
-    n = sub.add_parser("install", help="install the SIB hooks into an agent harness")
-    n.add_argument("harness", choices=["claude-code"], help="the harness to install into")
-    from .hooks.claude_code.install import add_arguments as _install_args
-    _install_args(n)
-    n.set_defaults(fn=cmd_install)
+    n = sub.add_parser("install", help="install SIB into an agent harness")
+    harness = n.add_subparsers(dest="harness", required=True)
+    cc = harness.add_parser("claude-code", help="hooks that verify and report provenance to the classifier")
+    from .hooks.claude_code.install import add_arguments as _cc_args
+    _cc_args(cc); cc.set_defaults(fn=cmd_install_claude_code)
+    cx = harness.add_parser("codex", help="auto-review policy that makes the reviewer verify signatures")
+    from .codex.install import add_arguments as _cx_args
+    _cx_args(cx); cx.set_defaults(fn=cmd_install_codex)
     i = sub.add_parser("inspect", help="decode blocks without verifying"); i.add_argument("file"); i.set_defaults(fn=cmd_inspect)
     a = ap.parse_args(argv)
     if a.cmd == "keygen" and a.enroll and not a.signer:

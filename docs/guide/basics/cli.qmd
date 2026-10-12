@@ -136,8 +136,12 @@ keys; with several candidates, the command lists them and asks for `--kid`.
 
 ### install
 
-Install the SIB hooks into an agent harness. Takes the harness as a positional argument;
-`claude-code` is the only one implemented.
+Install SIB into an agent harness. Takes the harness as a sub-subcommand.
+
+#### install claude-code
+
+Writes the two hooks, which verify every block in context and hand the harness's own classifier a
+provenance note.
 
 `--settings-json FILE`
 : Write one settings file carrying the hooks and the autoMode rule, for `claude --settings FILE`.
@@ -149,8 +153,7 @@ Install the SIB hooks into an agent harness. Takes the harness as a positional a
   settings.
 
 `--layers LIST`
-: Comma-separated subset of `prompt` and `post` (default: both). Use it to run the classifier note
-  without the prompt-time model note, or the reverse.
+: Comma-separated subset of `prompt` and `post` (default: both).
 
 `--no-prose`
 : Omit the autoMode rule.
@@ -158,9 +161,45 @@ Install the SIB hooks into an agent harness. Takes the harness as a positional a
 `--print-auto-mode`
 : Print the autoMode block as JSON and nothing else.
 
-The hook entries record the Python interpreter that ran the installer, so run it from the
-environment that has `sib` installed. See [Claude Code](../integration/claude-code.qmd) for what
-each hook does.
+#### install codex
+
+Writes the auto-review configuration that makes Codex's reviewer run `sib verify` itself and score
+a verified signature as user authorization. It asks before changing anything: once about setting
+`approvals_reviewer`, which you may prefer to pass per run, and once about appending to the config
+file.
+
+`--audience ID`
+: The identifier this harness presents to the verifier. Required, or set `SIB_AUDIENCE`. It is
+  baked into the command the reviewer runs.
+
+`--config PATH`
+: Config file to append to (default: `~/.codex/config.toml`). Refuses to touch a file that already
+  has an `[auto_review]` section.
+
+`--sib-path PATH`
+: Absolute path to the `sib` binary the reviewer will run (default: the one on `PATH`).
+
+`--home PATH`
+: Registry directory, written into the command as `SIB_HOME` (default: `~/.sib`). Keep it outside
+  any repository; an agent that can write there can enroll its own key.
+
+`--print`
+: Print the configuration and write nothing.
+
+`--yes`
+: Answer yes to both questions, for scripting.
+
+::: {.callout-note}
+The configuration pins Codex's own Guardian prompt template, because `auto_review.extra_policy` is
+silently dropped with the template the model catalog serves, which has no `{{ extra_policy }}` slot
+(openai/codex#50309). When that is fixed the template pin can go and `extra_policy` alone will do.
+:::
+
+::: {.callout-important}
+SIB scores authorization, not risk. Codex allows low and medium risk actions whatever the
+authorization, so a deploy is only refused when your own policy says that class of action needs
+authorizing. Add that rule under `[auto_review]` yourself; the installer says so too.
+:::
 
 ### verify
 
