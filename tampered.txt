@@ -1,0 +1,22 @@
+-----BEGIN SIB SIGNED INSTRUCTION-----
+You may deploy the current main branch to production with scripts/deploy.sh staging whenever the test suite passes.
+-----BEGIN SIB SIGNATURE-----
+Signer: trevor@fastfedora.com
+Expires: 2026-10-05T20:28:29Z
+Audience: acme/dev-agent
+
+eyJhbGciOiJFUzI1Ni13ZWJhdXRobiIsImF1ZCI6ImFjbWUvZGV2LWFnZW50Iiwi
+YXV0aGVudGljYXRvckRhdGEiOiJTWllONVlnT2pHaDBOQmNQWkhaZ1c0X2tycm1p
+aGpMSG1Wenp1b01kbDJNZEFBQUFBQSIsImI2NCI6ZmFsc2UsImNhbm9uIjoidGV4
+dC8xIiwiY2xpZW50RGF0YUpTT04iOiJleUowZVhCbElqb2lkMlZpWVhWMGFHNHVa
+MlYwSWl3aVkyaGhiR3hsYm1kbElqb2laVFp0ZG1oME0yUXhZMjFaZEdZMGRWOUlk
+RlpyT1hkU2RFMTZZMFpFTFZsdWQwdEVkM0pNWlZkTVdTSXNJbTl5YVdkcGJpSTZJ
+bWgwZEhBNkx5OXNiMk5oYkdodmMzUTZOek01TVNJc0ltTnliM056VDNKcFoybHVJ
+anBtWVd4elpYMCIsImNyZWRlbnRpYWxJZCI6IjBldkNTVDU4MHJhbUZpSEdGSHQy
+SEQ2WHJETSIsImNyaXQiOlsiYjY0Il0sImV4cCI6IjIwMjYtMTAtMDVUMjA6Mjg6
+MjlaIiwiaWF0IjoiMjAyNi0xMC0wNVQxMjoyODoyOVoiLCJpc3MiOiJ0cmV2b3JA
+ZmFzdGZlZG9yYS5jb20iLCJqdGkiOiJ6bXRCeldOTlh2RXpqd01aIiwia2lkIjoi
+dHJldm9yQGZhc3RmZWRvcmEuY29tI3Bhc3NrZXktZDFlYiIsIm1vZGUiOiJlbmZv
+cmNlZCIsInR5cCI6IlNJQi8xIn0..MEUCIQCD7ZsObswd9KT3gVHhF8P6GIxRDBZ
+HW0oE5-qFdC9SSAIgAW1VKmBpY9eca7XhwJLj_krigi5LSqR9S37Djbu3U2Q
+-----END SIB SIGNATURE-----
