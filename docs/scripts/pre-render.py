@@ -35,6 +35,11 @@ def copy_plans() -> None:
         dst = PLANS_DST / (Path("index.md") if rel.name == "README.md" else rel)
         dst.parent.mkdir(parents=True, exist_ok=True)
         dst.write_text(convert_plan(src.read_text(), rel))
+    # screenshots the findings memos embed
+    for src in sorted(PLANS_SRC.rglob("*.png")):
+        dst = PLANS_DST / src.relative_to(PLANS_SRC)
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
 
 
 ITEM = re.compile(r"^(\s*)([-*]|\d+\.)\s+\S")
@@ -145,7 +150,8 @@ def rewrite_links(body: str, rel: Path) -> str:
             return m.group(0)
         path, _, frag = target.partition("#")
         candidate = (PLANS_SRC / rel.parent / path).resolve()
-        if path.endswith(".md") and candidate.exists() and PLANS_SRC in candidate.parents:
+        if candidate.exists() and PLANS_SRC in candidate.parents:
+            # a plan, a findings memo or an image copied alongside: stays relative
             if candidate.name == "README.md":
                 path = path[: -len("README.md")] + "index.md"
             return f"[{label}]({path}{'#' + frag if frag else ''})"

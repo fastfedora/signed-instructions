@@ -4,7 +4,7 @@ from __future__ import annotations
 import datetime as dt
 from dataclasses import dataclass, asdict
 
-from . import keys_dev
+from . import keys_dev, keys_webauthn
 from .canon import canonicalize, UnknownCanonicalization
 from .envelope import Block
 from .header import Header, MalformedHeader, parse_time, signing_input
@@ -12,7 +12,9 @@ from .registry import Registry
 
 STATUSES = ("verified", "invalid_signature", "unknown_signer", "unknown_key", "expired", "not_yet_valid",
             "audience_mismatch", "metadata_mismatch", "malformed", "nonce_replayed", "revoked",
-            "dev_key_in_enforced_mode")
+            "dev_key_in_enforced_mode",
+            # ES256-webauthn path
+            "origin_not_allowed", "rp_id_mismatch", "uv_not_performed", "authenticator_not_allowed")
 CLOCK_SKEW = dt.timedelta(seconds=60)
 
 
@@ -29,6 +31,8 @@ class SpanResult:
     expires_at: str | None = None
     audience: str | None = None
     jti: str | None = None
+    alg: str | None = None
+    attestation_verified: bool | None = None   # from the registry entry; None when the key was not found
     error: str | None = None
 
     def to_dict(self) -> dict:
@@ -37,7 +41,7 @@ class SpanResult:
 
 def _claims(h: Header) -> dict:
     return dict(signer=h.iss, kid=h.kid, mode=h.mode, canon=h.canon, issued_at=h.iat,
-                expires_at=h.exp, audience=h.aud, jti=h.jti)
+                expires_at=h.exp, audience=h.aud, jti=h.jti, alg=h.alg)
 
 
 def verify_block(block: Block, now: dt.datetime, audience: str | None, registry: Registry,
@@ -67,19 +71,24 @@ def verify_block(block: Block, now: dt.datetime, audience: str | None, registry:
             return SpanResult("unknown_key", error=f"kid {h.kid!r} not enrolled for {h.iss}", **base)
         return SpanResult("unknown_signer", error=f"signer {h.iss!r} not in registry", **base)
     reg_signer, key = found
+    base["attestation_verified"] = bool(key.get("attestation_verified"))
     if reg_signer != h.iss:
         return SpanResult("unknown_key", error=f"kid {h.kid!r} belongs to {reg_signer}, not {h.iss}", **base)
     if key.get("alg") != h.alg:
         return SpanResult("unknown_key", error=f"kid {h.kid!r} is a {key.get('alg')} key, header says {h.alg}", **base)
+    if h.alg == keys_webauthn.ALG and h.credentialId != key.get("credential_id"):
+        return SpanResult("unknown_key", error=f"credentialId is not the credential enrolled as {h.kid!r}", **base)
     if mode == "enforced" and (h.mode == "dev" or key.get("mode") == "dev"):
         return SpanResult("dev_key_in_enforced_mode", error="dev-mode block or key in enforced mode", **base)
 
     if h.alg == "EdDSA":
-        ok = keys_dev.verify(key["public_key"], sig_b64, signing_input(header_b64, ctext))
-    else:  # pragma: no cover - closed alg list
-        ok = False
-    if not ok:
-        return SpanResult("invalid_signature", error="signature does not verify over the header and canonical text", **base)
+        if not keys_dev.verify(key["public_key"], sig_b64, signing_input(header_b64, ctext)):
+            return SpanResult("invalid_signature",
+                              error="signature does not verify over the header and canonical text", **base)
+    else:  # ES256-webauthn: the closed alg list has no third value
+        failure = keys_webauthn.check_assertion(h, ctext, sig_b64, key, registry.allowed_aaguids())
+        if failure:
+            return SpanResult(failure[0], error=failure[1], **base)
 
     mismatches = _metadata_mismatches(block.clear, h)
     if mismatches:

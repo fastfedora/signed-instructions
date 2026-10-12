@@ -74,17 +74,21 @@ signed. Field names follow JOSE and JWT where a registered name exists.
 | `jti` | string | yes | Unique identifier for this block; the replay nonce. At least 96 bits of randomness, base64url. |
 | `aud` | string | no | Audience: the deployment or harness that may honor the block. Required in enforced mode. |
 | `mode` | string | yes | `dev` for a software key, `enforced` for a hardware-backed key. |
+| `credentialId` | string | `ES256-webauthn` only | The WebAuthn credential id, base64url. MUST equal the credential enrolled under `kid`. |
+| `authenticatorData` | string | `ES256-webauthn` only | The assertion's authenticator data, base64url. |
+| `clientDataJSON` | string | `ES256-webauthn` only | The assertion's client data, base64url of the exact bytes the authenticator signed over. |
 
 A signer MUST NOT list `canon` in `crit`: a generic JWS library must be able to accept the header,
 and canonicalization is applied by the signer and the verifier before the bytes reach the
-signature primitive.
+signature primitive. The three assertion fields MUST be present, and non-empty, when `alg` is
+`ES256-webauthn` and MUST be absent otherwise.
 
 ### Algorithms
 
 | `alg` | Status | Signature primitive |
 |---|---|---|
 | `EdDSA` | normative | Ed25519 (RFC 8032) over the signing input. |
-| `ES256-webauthn` | reserved (Phase 2) | ECDSA P-256 over `authenticatorData ‖ SHA-256(clientDataJSON)`, with the WebAuthn challenge equal to `BASE64URL(SHA-256(signing input))`. Adds the header fields `credentialId`, `authenticatorData` and `clientDataJSON`, all base64url. The verifier MUST require the user-verification flag. |
+| `ES256-webauthn` | normative | ECDSA P-256 with SHA-256 over `authenticatorData ‖ SHA-256(clientDataJSON)`, in the ASN.1 DER form the authenticator returns, with the WebAuthn challenge equal to `BASE64URL(SHA-256(signing input))` computed over the header without the three assertion fields. The verifier MUST require the user-verification flag. See [WebAuthn Assertion](#webauthn-assertion). |
 
 A verifier MUST reject any other value with status `malformed`.
 
@@ -97,11 +101,44 @@ The signing input is the RFC 7797 form:
 ASCII(BASE64URL(UTF8(header JSON))) ‖ "." ‖ UTF8(canonical instruction)
 ```
 
-The canonical instruction is the instruction segment after the rule named in `canon`. The
-signature is computed over the signing input with the primitive named in `alg`.
+The canonical instruction is the instruction segment after the rule named in `canon`. For `EdDSA`
+the signature is computed over the signing input with the primitive named in `alg`. For
+`ES256-webauthn` the signing input is hashed into the WebAuthn challenge, as the next section
+describes, and the header JSON in it is the signing header: the block's header with
+`credentialId`, `authenticatorData` and `clientDataJSON` removed.
 
 
-## Example
+## WebAuthn Assertion
+
+A WebAuthn authenticator signs a challenge, not a document. The `ES256-webauthn` path binds the
+block to the challenge:
+
+1. The signer builds the signing header (every field except the three assertion fields),
+   computes the signing input over it and the canonical instruction, and sets
+
+   ```
+   challenge = SHA-256(signing input)
+   ```
+
+2. The authenticator performs a `webauthn.get` ceremony with that challenge, user verification
+   required, on the origin and RP ID enrolled for the key. It returns `authenticatorData`,
+   `clientDataJSON` and a signature over `authenticatorData ‖ SHA-256(clientDataJSON)`.
+   `clientDataJSON` carries `BASE64URL(challenge)` as the authenticator saw it.
+
+3. The signer adds `credentialId`, `authenticatorData` and `clientDataJSON` to the header,
+   base64url, and emits the block with the authenticator's signature as the third segment.
+
+A verifier recomputes the challenge from the block's header (minus the assertion fields) and the
+canonical instruction, and compares it with the one inside `clientDataJSON`. A change to the
+instruction or to any signed header field changes the recomputed challenge, so the block fails with
+`invalid_signature` even though the authenticator's signature over `clientDataJSON` still holds.
+The full check sequence is in [Verification](verification.qmd#algorithm).
+
+The header JSON is serialized with RFC 8785 rules (sorted keys, no whitespace, UTF-8), so removing
+three fields and re-encoding reproduces the signing header byte for byte.
+
+
+## Example (Dev Mode)
 
 Produced with the reference implementation in dev mode. It verifies against the registry entry
 below with audience `acme/dev-agent` at any time before the `Expires` value.
@@ -170,3 +207,97 @@ The registry entry the verifier uses:
 ```
 
 `public_key` is the 32-byte Ed25519 public key, base64url without padding.
+
+
+## Example (Passkey)
+
+Produced by `sib sign` through the sign page in Chromium with a virtual authenticator (CTAP2,
+internal transport, user verification on). The same instruction, signed in enforced mode:
+
+```
+-----BEGIN SIB SIGNED INSTRUCTION-----
+You may deploy the current main branch to staging with scripts/deploy.sh staging whenever the test suite passes.
+-----BEGIN SIB SIGNATURE-----
+Signer: alice@example.com
+Expires: 2026-10-05T19:45:21Z
+Audience: acme/dev-agent
+
+eyJhbGciOiJFUzI1Ni13ZWJhdXRobiIsImF1ZCI6ImFjbWUvZGV2LWFnZW50Iiwi
+YXV0aGVudGljYXRvckRhdGEiOiJTWllONVlnT2pHaDBOQmNQWkhaZ1c0X2tycm1p
+aGpMSG1Wenp1b01kbDJNRkFBQUFBdyIsImI2NCI6ZmFsc2UsImNhbm9uIjoidGV4
+dC8xIiwiY2xpZW50RGF0YUpTT04iOiJleUowZVhCbElqb2lkMlZpWVhWMGFHNHVa
+MlYwSWl3aVkyaGhiR3hsYm1kbElqb2lkamR0YVZrNWNISjVVbkptUkdwd1ZEVlJT
+VU5KUjJ4RWJVcG9WelJxUmtreGFraHVUWFZhU2s5elVTSXNJbTl5YVdkcGJpSTZJ
+bWgwZEhBNkx5OXNiMk5oYkdodmMzUTZOek01TVNJc0ltTnliM056VDNKcFoybHVJ
+anBtWVd4elpYMCIsImNyZWRlbnRpYWxJZCI6ImtZakM2VlZEak5HZHNLOWpIY1BQ
+YXJpQi1BVVdDOEtEeFdMVkgtVnA5cDQiLCJjcml0IjpbImI2NCJdLCJleHAiOiIy
+MDI2LTEwLTA1VDE5OjQ1OjIxWiIsImlhdCI6IjIwMjYtMTAtMDVUMTE6NDU6MjFa
+IiwiaXNzIjoiYWxpY2VAZXhhbXBsZS5jb20iLCJqdGkiOiJNbkxsblFvckoxcXZB
+MTNIIiwia2lkIjoiYWxpY2VAZXhhbXBsZS5jb20jcGFzc2tleS05MTg4IiwibW9k
+ZSI6ImVuZm9yY2VkIiwidHlwIjoiU0lCLzEifQ..MEUCIBSeF4vM5-5Tc3xmHAFN
+epXfRjIWK_UmW6OMOf5FzgMlAiEAof9HmjZu0Vv4pAqh4dFrzhYVhan_8fAikT-z
+08GBC-0
+-----END SIB SIGNATURE-----
+```
+
+The decoded header:
+
+```json
+{
+  "alg": "ES256-webauthn",
+  "typ": "SIB/1",
+  "kid": "alice@example.com#passkey-9188",
+  "b64": false,
+  "crit": ["b64"],
+  "canon": "text/1",
+  "iss": "alice@example.com",
+  "iat": "2026-10-05T11:45:21Z",
+  "exp": "2026-10-05T19:45:21Z",
+  "jti": "MnLlnQorJ1qvA13H",
+  "aud": "acme/dev-agent",
+  "mode": "enforced",
+  "credentialId": "kYjC6VVDjNGdsK9jHcPPariB-AUWC8KDxWLVH-Vp9p4",
+  "authenticatorData": "SZYN5YgOjGh0NBcPZHZgW4_krrmihjLHmVzzuoMdl2MFAAAAAw",
+  "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoidjdtaVk5cHJ5UnJmRGpwVDVRSUNJR2xEbUpoVzRqRkkxakhuTXVaSk9zUSIsIm9yaWdpbiI6Imh0dHA6Ly9sb2NhbGhvc3Q6NzM5MSIsImNyb3NzT3JpZ2luIjpmYWxzZX0"
+}
+```
+
+`clientDataJSON` decodes to the bytes the authenticator signed over; its `challenge` is the
+SHA-256 of the signing input over the header without the three assertion fields:
+
+```json
+{"type":"webauthn.get","challenge":"v7miY9pryRrfDjpT5QICIGlDmJhW4jFI1jHnMuZJOsQ","origin":"http://localhost:7391","crossOrigin":false}
+```
+
+`authenticatorData` is 37 bytes: the SHA-256 of the RP ID `localhost` (`49960de5880e8c68…`), the
+flags byte `0x05` (UP and UV set) and the signature counter `3`. The signature segment is the
+authenticator's DER-encoded ECDSA signature. The registry entry the verifier uses:
+
+```json
+{
+  "signer": "alice@example.com",
+  "keys": [
+    {
+      "kid": "alice@example.com#passkey-9188",
+      "alg": "ES256-webauthn",
+      "public_key": "pQECAyYgASFYIAme6lzACHBimeQ_-XoqnWCJGkWnolTu63bWExx4t1mZIlggf_dOOJAncBQ8B9jE1koWCovF_qJejGQv_fBEm2QL1oY",
+      "mode": "enforced",
+      "enrolled_at": "2026-10-05T11:45:20Z",
+      "attestation_verified": false,
+      "attestation": {"format": "packed", "x5c_present": true, "roots": null},
+      "revoked": false,
+      "credential_id": "kYjC6VVDjNGdsK9jHcPPariB-AUWC8KDxWLVH-Vp9p4",
+      "aaguid": "01020304-0506-0708-0102-030405060708",
+      "sign_count": 1,
+      "origins": ["http://localhost:7391"],
+      "rp_id": "localhost",
+      "transports": ["internal"]
+    }
+  ]
+}
+```
+
+`public_key` is the COSE-encoded P-256 public key, base64url without padding. The virtual
+authenticator's AAGUID is not on the built-in allowlist, so this block verifies only against a
+registry that adds it under `allowed_aaguids`, which is the configuration the example was produced
+with.

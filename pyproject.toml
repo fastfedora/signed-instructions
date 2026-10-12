@@ -7,13 +7,20 @@ license = "Apache-2.0"
 dependencies = [
   "cryptography>=42",
   "anthropic>=0.40",
+  "webauthn>=3.0.1",
+  "fastapi>=0.142.2",
+  "uvicorn>=0.54.0",
 ]
 
 [project.scripts]
 sib = "sib.cli:main"
 
 [dependency-groups]
-dev = ["pytest>=8", "hypothesis>=6"]
+dev = [
+    "pytest>=8",
+    "hypothesis>=6",
+    "httpx>=0.28.1",
+]
 doc = [
   "griffe>=1.15.0",
   "markdown>=3.10",

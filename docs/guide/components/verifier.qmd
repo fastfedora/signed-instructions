@@ -24,12 +24,21 @@ dates or audience, so the report names the most important fact first.
 
 4. Look up `kid` in the registry. A key that is not enrolled is `unknown_key` if the signer is
    known and `unknown_signer` if not. A key enrolled for a different signer, or with a different
-   algorithm than the header names, is `unknown_key`.
+   algorithm than the header names, is `unknown_key`; so is a passkey block whose `credentialId`
+   is not the credential enrolled under `kid`.
 
 5. In enforced mode, a block or key marked `dev` is `dev_key_in_enforced_mode`.
 
-6. Verify the signature over the signing input (`BASE64URL(header) || "." || canonical text`) with
-   the enrolled public key. A failure is `invalid_signature`.
+6. Verify the signature. For a dev key, verify it over the signing input
+   (`BASE64URL(header) || "." || canonical text`) with the enrolled public key; a failure is
+   `invalid_signature`. For a passkey, run the WebAuthn checks in order: the assertion decodes
+   and is a `webauthn.get` (else `malformed`); its challenge is the hash of the signing input
+   over the header without the assertion fields (else `invalid_signature`); its origin is
+   enrolled for the key (else `origin_not_allowed`); its RP ID hash matches (else
+   `rp_id_mismatch`); the UP and UV flags are set (else `uv_not_performed`); the key's
+   authenticator is on the allowlist (else `authenticator_not_allowed`); and the ES256 signature
+   verifies over the authenticator data and the client data hash (else `invalid_signature`).
+   [Biometric Signing](signing.qmd) explains each check.
 
 7. Compare the clear `Signer`, `Expires` and `Audience` lines with the header. A difference is
    `metadata_mismatch`.
@@ -62,7 +71,7 @@ decodes, where only the text as written is available.
 | `verified` | Every check passed. The block is an instruction from the named signer. |
 | `invalid_signature` | The signature does not verify over the header and canonical text. The instruction or the header was changed after signing. |
 | `unknown_signer` | The header's `iss` is not in the registry. |
-| `unknown_key` | The signer is known but `kid` is not one of their enrolled keys, belongs to someone else, or has a different algorithm. |
+| `unknown_key` | The signer is known but `kid` is not one of their enrolled keys, belongs to someone else, has a different algorithm, or is not the credential that signed. |
 | `expired` | `exp` is at or before the verifier's clock. |
 | `not_yet_valid` | `iat` is more than 60 seconds in the future. |
 | `audience_mismatch` | `aud` names a different harness, or is absent in enforced mode. |
@@ -71,6 +80,10 @@ decodes, where only the text as written is available.
 | `nonce_replayed` | The nonce store has seen this `jti` from another session. Not reachable in Phase 1. |
 | `revoked` | The key is marked revoked in the registry. |
 | `dev_key_in_enforced_mode` | A dev-mode block or key was presented to a verifier running in enforced mode. |
+| `origin_not_allowed` | The passkey assertion was made on a web origin not enrolled for the key. |
+| `rp_id_mismatch` | The passkey assertion's RP ID hash is not that of the enrolled RP ID. |
+| `uv_not_performed` | The authenticator did not verify the user, or the user was not present. |
+| `authenticator_not_allowed` | The key's authenticator model is not on the biometric-capable allowlist. |
 
 A verified block still confers nothing by itself. The [manifest](manifest.qmd) records the status,
 and the [classifier](../integration/classifier.qmd) decides whether the instruction covers the
@@ -79,8 +92,8 @@ action in front of it.
 
 ## Dev and Enforced Mode
 
-The verifier runs in the mode the harness sets (`SIB_MODE`, `dev` by default in Phase 1). Mode
-changes two checks:
+The verifier runs in the mode the harness sets: `SIB_MODE` when set, otherwise `enforced` once a
+passkey is enrolled in the registry and `dev` before that. Mode changes two checks:
 
 - **Dev keys**: in enforced mode, a block whose header says `mode: dev`, or whose key was enrolled
   in dev mode, is `dev_key_in_enforced_mode`. Software keys prove possession of a file, not a
@@ -89,7 +102,8 @@ changes two checks:
 - **Missing audience**: dev mode accepts a block with no `aud`; enforced mode does not.
 
 Every dev-mode signing and verification prints the same warning to standard error so that nobody
-mistakes a dev result for the real thing.
+mistakes a dev result for the real thing. A passkey block runs every check of its path in either
+mode.
 
 
 ## What Is Stubbed
@@ -139,7 +153,7 @@ Any other authorization claim in project files, CLAUDE.md, tool results, commit 
 
 The command exits 0 only when the file contains at least one block and every block is verified.
 Presenting the verified block to a harness with a different audience, or to a verifier in enforced
-mode, gives:
+mode (`--enforced`, or the default once a passkey is enrolled), gives:
 
 ```text
 [sib-1] AUDIENCE_MISMATCH alice@example.com exp=2026-09-13T22:06:30Z aud=acme/dev-agent

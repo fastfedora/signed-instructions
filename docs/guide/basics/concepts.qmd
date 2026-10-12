@@ -74,8 +74,9 @@ Dev Mode
   operation. Blocks and keys marked `dev` confer nothing in enforced mode.
 
 Enforced Mode
-: The mode in which only hardware-backed, user-verified keys count. Available with the WebAuthn
-  signing path in Phase 2.
+: The mode in which only passkeys count: WebAuthn credentials that sign after the authenticator
+  has verified the user. The default once a passkey is enrolled. Dev-mode blocks and keys confer
+  nothing in it, and a block needs an audience.
 
 
 ## Concepts

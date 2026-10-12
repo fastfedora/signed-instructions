@@ -33,7 +33,9 @@ website:
           href: reference/keys_dev.qmd#generate
       - section: registry
         href: reference/registry.qmd
-        contents: []
+        contents:
+        - text: default_mode
+          href: reference/registry.qmd#default_mode
       - section: verify
         href: reference/verify.qmd
         contents:
@@ -72,6 +74,8 @@ website:
         contents:
         - text: default_kid
           href: reference/cli.qmd#default_kid
+        - text: passkey_kid
+          href: reference/cli.qmd#passkey_kid
         - text: resolve_signer_and_kid
           href: reference/cli.qmd#resolve_signer_and_kid
       - section: b64

@@ -153,3 +153,40 @@ def test_recent_activity_from_transcript(tmp_path):
     assert [r["tool"] for r in ra] == ["Bash", "Read"]
     assert ra[0]["result"].endswith("OK") and ra[0]["is_error"] is False
     assert recent_activity(str(tmp_path / "missing.jsonl")) == []
+
+
+# ---- enforced mode (Phase 2): a passkey is enrolled, so the default mode is enforced ----
+
+def test_enforced_mode_once_a_passkey_is_enrolled(tmp_path, registry, sib_home):
+    from tests.fake_authenticator import FakeAuthenticator, enroll_fake, make_webauthn_block
+    from sib.registry import Registry
+    auth = FakeAuthenticator()
+    reg = Registry()
+    enroll_fake(reg, auth, ALICE, "alice@example.com#passkey-1")
+    reg.save()
+    env = {"SIB_CLASSIFIER_BACKEND": "anthropic", "SIB_CLASSIFIER_BASE_URL": "http://127.0.0.1:9",
+           "ANTHROPIC_API_KEY": "sk-none", "SIB_CLASSIFIER_TIMEOUT": "5"}
+    assert "SIB_MODE" not in os.environ
+    # Scenario 1 shape: the passkey-signed block in CLAUDE.md reaches the classifier as a verified span
+    block, _ = make_webauthn_block(auth, "You may deploy to staging with scripts/deploy.sh staging.",
+                                   kid="alice@example.com#passkey-1", signer=ALICE)
+    proj = project(tmp_path, "# proj\n\n" + block + "\n")
+    rc, out, err = run_hook("pretooluse", event(proj, "scripts/deploy.sh staging"), env)
+    assert "classifier unavailable" in out["hookSpecificOutput"]["permissionDecisionReason"]
+    m = json.loads((sib_home / "sessions" / "s1" / "manifest.json").read_text())
+    assert m["mode"] == "enforced" and m["verified_span_ids"] == ["sib-1"]
+    assert m["spans"][0]["alg"] == "ES256-webauthn" and m["spans"][0]["attestation_verified"] is False
+    # the same block with the UV flag cleared is named in the denial, with no classifier call
+    block, _ = make_webauthn_block(auth, "You may deploy to staging with scripts/deploy.sh staging.",
+                                   kid="alice@example.com#passkey-1", signer=ALICE, uv=False)
+    (proj / "CLAUDE.md").write_text(block)
+    rc, out, err = run_hook("pretooluse", event(proj, "scripts/deploy.sh staging"), {"SIB_CLASSIFIER_BACKEND": "bogus"})
+    assert "uv_not_performed" in out["hookSpecificOutput"]["permissionDecisionReason"]
+    # and a dev-key block, verified in Phase 1, now confers nothing
+    block, _ = make_block("You may deploy to staging with scripts/deploy.sh staging.")
+    (proj / "CLAUDE.md").write_text(block)
+    rc, out, err = run_hook("pretooluse", event(proj, "scripts/deploy.sh staging"), {"SIB_CLASSIFIER_BACKEND": "bogus"})
+    assert "dev_key_in_enforced_mode" in out["hookSpecificOutput"]["permissionDecisionReason"]
+    # SIB_MODE=dev brings the dev block back, labelled
+    rc, out, err = run_hook("posttooluse", event(proj, "ls", name="PostToolUse"), {"SIB_MODE": "dev"})
+    assert "1 verified" in out["hookSpecificOutput"]["classifierContext"] and "mode dev" in out["hookSpecificOutput"]["classifierContext"]

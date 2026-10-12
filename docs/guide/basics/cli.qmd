@@ -3,8 +3,9 @@ title: Command Line Interface (CLI)
 ---
 
 The `sib` command creates keys, enrolls them, signs instructions, verifies files and decodes
-blocks. It runs in dev mode in Phase 1: every command that signs or verifies prints the dev-mode
-warning to standard error.
+blocks. With a dev key it runs in dev mode and every command that signs or verifies prints the
+dev-mode warning to standard error; with a passkey enrolled it signs through the browser and
+verifies in enforced mode.
 
 All commands read `SIB_HOME` for the directory that holds keys and the registry (default:
 `~/.sib`).
@@ -18,6 +19,9 @@ Inside the repository, run it as `uv run sib`. After `source .venv/bin/activate`
 ```bash
 # Create a dev key and enroll it for a signer
 sib keygen --signer alice@example.com --enroll
+
+# Or enroll a passkey (Touch ID, Windows Hello, a security key) through the browser
+sib enroll --signer alice@example.com
 
 # Sign an instruction given on the command line, writing the block to stdout
 sib sign --signer alice@example.com --expires 2h --audience acme/dev-agent \
@@ -56,45 +60,61 @@ Create a dev-mode Ed25519 key under `$SIB_HOME/dev-keys/` and optionally enroll 
 
 ### enroll
 
-Add an existing public key to the registry, for keys created elsewhere.
+Enroll a passkey through the browser, or add a public key given on the command line. Without
+`--public-key` the command starts the local signing app, opens the enroll page and waits for the
+authenticator; see [Biometric Signing](../components/signing.qmd#enrollment).
 
 `--signer ID`
 : The signer the key belongs to. Required.
 
 `--kid ID`
-: Key identifier. Required.
+: Key identifier. Derived as `<signer>#passkey-<id>` for a passkey; required with
+  `--public-key`.
 
 `--public-key B64URL`
-: The raw public key, base64url encoded. Required.
+: Enroll this raw public key, base64url encoded, instead of a passkey.
 
 `--alg ALG`
-: Signature algorithm (default: `EdDSA`).
+: Signature algorithm of `--public-key` (default: `EdDSA`).
 
 `--dev`
 : Mark the key as a dev-mode key. Without it the key is enrolled as `enforced`.
 
+`--timeout SECONDS`
+: How long to wait for the browser (default: 180).
+
+`--no-browser`
+: Print the page URL instead of opening a browser.
+
+`--browser NAME`
+: The browser to open the page in, when the system default lacks passkey support or a password
+  manager in it captures the prompt: a name the Python `webbrowser` module knows (`safari`,
+  `chrome`, `firefox`) or a command the URL is appended to (`'open -a Safari'`). Defaults to
+  `SIB_BROWSER`, then the system default.
+
 ### sign
 
 Clearsign an instruction. The command prints the canonical text and the terms before signing, so
-what you see is what you sign.
+what you see is what you sign. With a passkey it opens the sign page and waits for the
+authenticator; with a dev key it signs at once.
 
 Either identifier is enough: a `--kid` names its signer through the registry, and a `--signer`
-with exactly one enrolled key names that key. With several keys, the command lists them and asks
-for `--kid`.
+with exactly one enrolled key names that key. A signer's passkeys are preferred over their dev
+keys; with several candidates, the command lists them and asks for `--kid`.
 
 `--signer ID`
 : The signer, written to the `iss` header field. Derived from `--kid` when omitted; checked for
   agreement when both are given.
 
 `--kid ID`
-: The key to sign with. Derived from `--signer` when the signer has one enrolled key.
+: The key to sign with. Derived from `--signer` when the signer has one candidate key.
 
 `--expires DURATION`
 : Validity window from now, as `30m`, `2h` or `1d` (default: `2h`).
 
 `--audience ID`
-: The deployment or harness the block is for. Optional in dev mode; a block with no audience is
-  refused in enforced mode.
+: The deployment or harness the block is for. Optional for a dev key; required for a passkey,
+  because a block with no audience is refused in enforced mode.
 
 `--canon RULE`
 : Canonicalization rule (default: `text/1`). See [Canonicalization](../components/canonicalization.qmd).
@@ -108,10 +128,17 @@ for `--kid`.
 `--out PATH`
 : Write the block to a file instead of standard output.
 
+`--dev`
+: Sign with a dev key even when a passkey is enrolled; refuses a `--kid` that is not a dev key.
+
+`--timeout SECONDS`, `--no-browser`, `--browser NAME`
+: As for `enroll`.
+
 ### verify
 
 Extract and verify every block in a file. Exits with status 0 only when at least one block was
-found and every block verified.
+found and every block verified. The mode is enforced once a passkey is enrolled in the registry
+and dev before that, unless `SIB_MODE` or a flag says otherwise.
 
 `FILE`
 : The file to check, or `-` for standard input.
@@ -121,6 +148,9 @@ found and every block verified.
 
 `--enforced`
 : Verify in enforced mode: dev-mode blocks and keys confer nothing.
+
+`--dev`
+: Verify in dev mode: both kinds of key verify, with the warning.
 
 `--json`
 : Print the provenance manifest as JSON instead of the human-readable summary.
@@ -137,11 +167,18 @@ the decoded header and the first characters of the signature.
 ## Exit Codes
 
 `sib verify` returns 0 when every block verified, 1 otherwise, including when no block was
-found. The other commands return 0 on success and exit with a message on a usage error, such as
-signing with a key that is not enrolled for the signer.
+found. `sib sign` returns 1 and writes no block when the authenticator's assertion does not
+verify, naming the status. The other commands return 0 on success and exit with a message on a
+usage error, such as signing with a key that is not enrolled for the signer.
 
 
 ## Environment
 
 `SIB_HOME`
 : Directory for dev keys and `registry.json` (default: `~/.sib`).
+
+`SIB_MODE`
+: `dev` or `enforced`; overrides the default described under `verify`.
+
+`SIB_BROWSER`, `SIB_WEBAUTHN_PORT`, `SIB_REQUIRE_ATTESTATION`, `SIB_ATTESTATION_ROOTS`
+: Passkey enrollment and signing; see [Biometric Signing](../components/signing.qmd#environment).

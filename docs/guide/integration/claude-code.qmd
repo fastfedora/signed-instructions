@@ -210,7 +210,8 @@ hook entry points (`tests/test_hooks.py`).
 : Directory for keys, the registry and per-session state (default: `~/.sib`).
 
 `SIB_MODE`
-: `dev` (default) or `enforced`. In enforced mode a dev-mode block or key yields
+: `dev` or `enforced`. When unset, the hooks run in enforced mode once a passkey is enrolled in
+  the registry and in dev mode before that. In enforced mode a dev-mode block or key yields
   `dev_key_in_enforced_mode` and confers nothing.
 
 `SIB_POLICY`

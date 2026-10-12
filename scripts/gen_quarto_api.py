@@ -19,6 +19,8 @@ MODULE_DESCRIPTIONS = {
     "header": "The signed header, its serialization, and the RFC 7797 signing input",
     "envelope": "Rendering and extracting clearsigned blocks",
     "keys_dev": "Dev-mode Ed25519 keys (sign, verify, key storage)",
+    "keys_webauthn": "Passkeys: the ES256-webauthn assertion checks, enrollment verification and the AAGUID allowlist",
+    "webauthn_app": "The local signing app (enroll and sign pages) and the CLI bridge to it",
     "registry": "Flat-file signer registry",
     "verify": "The deterministic verifier and its statuses",
     "manifest": "Provenance manifest and the classifier note",
@@ -28,8 +30,8 @@ MODULE_DESCRIPTIONS = {
     "cli": "The `sib` command-line interface",
     "b64": "base64url helpers",
 }
-ORDER = ["canon", "header", "envelope", "keys_dev", "registry", "verify", "manifest", "nonce_store",
-         "classifier", "hooks", "cli", "b64"]
+ORDER = ["canon", "header", "envelope", "keys_dev", "keys_webauthn", "webauthn_app", "registry", "verify",
+         "manifest", "nonce_store", "classifier", "hooks", "cli", "b64"]
 
 TEMPLATE = """---
 title: {package}.{module}

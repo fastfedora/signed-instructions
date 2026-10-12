@@ -6,8 +6,9 @@ reference verifier before writing it.
 
 Each vector is a JSON file holding the block, the registry the verifier is
 given, the verification inputs, and the status a conforming verifier MUST
-produce. A fixed dev key is generated fresh on every run, so the signatures
-change between runs while the expected statuses do not.
+produce. A dev key and a software WebAuthn authenticator are generated fresh
+on every run, so the signatures change between runs while the expected
+statuses do not.
 """
 from __future__ import annotations
 
@@ -32,9 +33,11 @@ from sib.header import Header, format_time, signing_input  # noqa: E402
 from sib.nonce_store import NoopNonceStore  # noqa: E402
 from sib.registry import Registry  # noqa: E402
 from sib.verify import clear_lines, verify_block  # noqa: E402
+from tests.fake_authenticator import FakeAuthenticator, enroll_fake, make_webauthn_block  # noqa: E402
 
 ALICE = "alice@example.com"
 KID = "alice@example.com#dev-2026-09"
+PKID = "alice@example.com#passkey-7c1e"
 AUD = "acme/dev-agent"
 NOW = dt.datetime(2026, 9, 13, 12, 0, 0, tzinfo=dt.timezone.utc)
 TEXT = "You may deploy the current main branch to staging with\nscripts/deploy.sh staging whenever the test suite passes."
@@ -52,7 +55,17 @@ def make(text, *, kid=KID, signer=ALICE, aud=AUD, canon="text/1", header_canon=N
 
 
 def registry_dict(reg: Registry) -> dict:
-    return {"signers": [{"signer": s, "keys": ks} for s, ks in reg.signers.items()]}
+    d = {"signers": [{"signer": s, "keys": ks} for s, ks in reg.signers.items()]}
+    if reg.extra_aaguids:
+        d["allowed_aaguids"] = dict(reg.extra_aaguids)
+    return d
+
+
+def registry_copy(reg: Registry) -> Registry:
+    r = Registry(path=Path(os.environ["SIB_HOME"]) / "nonexistent.json")
+    r.signers = json.loads(json.dumps(reg.signers))
+    r.extra_aaguids = dict(reg.extra_aaguids)
+    return r
 
 
 def main() -> None:
@@ -97,15 +110,41 @@ def main() -> None:
         note="Header names a canonicalization rule the verifier does not know.")
 
     # revoked: a registry copy with the key revoked
-    reg2 = Registry()
-    reg2.signers = json.loads(json.dumps(reg.signers))
+    reg2 = registry_copy(reg)
     reg2.lookup(KID)[1]["revoked"] = True
     add("revoked", good, "revoked", registry=reg2, note="The key is marked revoked in the registry.")
+
+    # ES256-webauthn: a passkey enrolled alongside the dev key; the verifier runs in enforced mode
+    auth = FakeAuthenticator()
+    enroll_fake(reg, auth, ALICE, PKID)
+    wa = lambda **kw: make_webauthn_block(auth, TEXT, kid=PKID, signer=ALICE, now=NOW, **kw)[0]  # noqa: E731
+    wgood = wa()
+    add("webauthn_verified", wgood, "verified", mode="enforced",
+        note="Signed by a passkey: UV set, origin and RP ID enrolled, AAGUID allowlisted.")
+    add("webauthn_verified_dev_mode", wgood, "verified", mode="dev",
+        note="The same block in dev mode: both paths verify there.")
+    add("webauthn_invalid_signature", wgood.replace("to staging", "to production"), "invalid_signature", mode="enforced",
+        note="One word changed after signing: the recomputed challenge no longer matches clientDataJSON.")
+    add("webauthn_uv_not_performed", wa(uv=False), "uv_not_performed", mode="enforced",
+        note="The assertion's UV flag is clear.")
+    add("webauthn_origin_not_allowed", wa(origin="http://localhost:8000"), "origin_not_allowed", mode="enforced",
+        note="clientDataJSON.origin is not among the origins enrolled for the key.")
+    add("webauthn_rp_id_mismatch", wa(rp_id="example.com"), "rp_id_mismatch", mode="enforced",
+        note="rpIdHash is not SHA-256 of the enrolled RP ID.")
+    add("webauthn_unknown_key_wrong_credential", wa(credential_id=b64u_encode(b"other-credential")), "unknown_key",
+        mode="enforced", note="credentialId is not the credential enrolled under this kid.")
+    reg3 = registry_copy(reg)
+    reg3.extra_aaguids = {}
+    add("webauthn_authenticator_not_allowed", wgood, "authenticator_not_allowed", mode="enforced", registry=reg3,
+        note="The same block against a registry whose allowlist lacks the authenticator's AAGUID.")
+    add("dev_block_with_passkey_enrolled", good, "dev_key_in_enforced_mode", mode="enforced",
+        note="A dev block once a passkey is enrolled: the default mode is enforced and dev keys confer nothing.")
 
     # Check every vector against the reference verifier before writing it.
     for v in vectors:
         r = Registry(path=Path(os.environ["SIB_HOME"]) / "nonexistent.json")
         r.signers = {s["signer"]: s["keys"] for s in v["registry"]["signers"]}
+        r.extra_aaguids = dict(v["registry"].get("allowed_aaguids") or {})
         blocks = extract(v["block"])
         assert len(blocks) == 1, v["name"]
         now = dt.datetime.strptime(v["inputs"]["now"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=dt.timezone.utc)
