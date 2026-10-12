@@ -161,3 +161,41 @@ def test_sign_refuses_an_assertion_that_does_not_verify(sib_home, monkeypatch):
     monkeypatch.setattr(sib.webauthn_app, "sign_in_browser", _fake_sign_in_browser(auth))
     rc, out, err = run(["sign", "--signer", "alice@example.com", "--audience", "a", "--text", "x"])
     assert rc != 0 and "authenticator_not_allowed" in err and "no block written" in err and out == ""
+
+
+def test_install_codex_prints_a_usable_fragment(sib_home, tmp_path):
+    rc, so, se = run(["install", "codex", "--audience", "acme/dev-agent",
+                      "--home", str(tmp_path / "sib"), "--sib-path", "/usr/bin/true", "--print"])
+    assert rc == 0
+    assert "[auto_review]" in so and "experimental_policy_template" in so and "extra_policy" in so
+    # the reviewer runs the command literally, so the machine's own values must be baked in
+    assert f"SIB_HOME={tmp_path / 'sib'}" in so and "--audience acme/dev-agent" in so
+    # --print writes nothing and does not offer to
+    assert "appended to" not in so
+
+
+def test_install_codex_writes_and_refuses_to_clobber(sib_home, tmp_path):
+    cfg = tmp_path / "config.toml"
+    cfg.write_text("model = \"gpt-6\"\n")
+    rc, so, se = run(["install", "codex", "--audience", "a/b", "--config", str(cfg),
+                      "--home", str(tmp_path / "sib"), "--sib-path", "/usr/bin/true", "--yes"])
+    assert rc == 0 and "appended to" in so
+    text = cfg.read_text()
+    assert text.startswith("model = ") and "[auto_review]" in text
+    assert 'approvals_reviewer = "auto_review"' in text       # --yes answers both questions yes
+    rc, so, se = run(["install", "codex", "--audience", "a/b", "--config", str(cfg),
+                      "--home", str(tmp_path / "sib"), "--sib-path", "/usr/bin/true", "--yes"])
+    assert rc != 0 and "already has an [auto_review] section" in se
+
+
+def test_install_codex_needs_an_audience(sib_home, monkeypatch):
+    monkeypatch.delenv("SIB_AUDIENCE", raising=False)
+    rc, so, se = run(["install", "codex", "--print"])
+    assert rc != 0 and "--audience" in se
+
+
+def test_install_codex_warns_about_a_registry_inside_the_repo(sib_home, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    rc, so, se = run(["install", "codex", "--audience", "a/b", "--home", str(tmp_path / "inside"),
+                      "--sib-path", "/usr/bin/true", "--print"])
+    assert rc == 0 and "inside the working directory" in se
