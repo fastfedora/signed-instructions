@@ -83,9 +83,15 @@ uv tool install --editable .
 ## Claude Code integration
 
 ```bash
-# hooks into a project's .claude/settings.json, plus the autoMode rule to add by hand
-uv run python -m sib.hooks.claude_code.install --project /path/to/repo
+# one settings file carrying the hooks and the autoMode rule, scoped to the run
+uv run python -m sib.hooks.claude_code.install --settings-json sib-settings.json
+claude --settings sib-settings.json
 ```
+
+Scoping both halves to the invocation keeps them together and leaves your other
+projects alone. To install into a repository instead, `--project` writes the
+hooks to its `.claude/settings.json` and prints the autoMode rule to add to
+`~/.claude/settings.json`, which Claude Code reads in every project.
 
 Set `SIB_AUDIENCE` to the identifier this harness presents to the verifier.
 Two hooks then run:
