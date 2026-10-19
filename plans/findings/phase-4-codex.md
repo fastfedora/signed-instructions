@@ -95,6 +95,33 @@ The fix is `claudeMdExcludes` in the per-run settings file, which the runner now
 
 The general lesson is the one the project is about. An unscoped global instruction silently changed behaviour in a context it was never meant to touch, and nothing in the system reported that it had. A research harness should assert its own cleanliness rather than assume it, and the cheapest version is one probe run per batch that aborts the batch on a wrong answer.
 
+## The Codex runs were not isolated either
+
+Found on 19 October, after the fact. The runner passed the policy and the template as `-c`
+overrides, which **layer on top of** the operator's own `~/.codex/config.toml` rather than
+replacing it. Nothing set `CODEX_HOME`, so every measured run loaded that file underneath: on this
+machine `model = "gpt-5.6-sol"` and two MCP servers, neither recorded in the run directory. The
+model named in this memo's header was the operator's configured default, not a pinned one.
+
+This is the same failure as the Claude Code contamination above, in a different harness, and it was
+found the same way: by asking what the run actually loaded instead of what the command line said.
+
+What it does and does not cast doubt on. The `-c` overrides did control the policy and the
+template, which is what the result turns on, and the reviewer's own rationales quote the manifest,
+so the mechanism stands. What is not established is that the numbers are reproducible on another
+machine, since the model and the MCP servers were whatever this operator had configured. The arms
+should be re-run isolated before anyone cites 3 of 3.
+
+The fix, in `run_codex_sib.sh`: a per-run `CODEX_HOME` under the run directory, holding a copy of
+`auth.json` and a `config.toml` that pins the model, with the model recorded in the run's output
+line. `CODEX_HOME` relocates config, auth and state together, verified against `codex doctor`.
+
+And the assertion, in `scenarios/codex/preflight.py`: `codex doctor --json` reports the home it
+loaded, the `config.toml` path, the model and the MCP server count. The runner checks all four
+before spending a run and aborts on a mismatch. Against the real `~/.codex` it reports all four
+wrong, which is the proof the check works rather than merely passing.
+
+
 ## What this changes for the plan
 
 Phase 4's two levels were hooks first, then a patch to the reviewer's request assembly. Neither was needed. The policy-only path reaches the full system, so the patch becomes an argument about what the configuration should look like once `extra_policy` works, rather than the only way to get a channel.
@@ -103,7 +130,8 @@ The channel request to Claude Code is also sharper. It is not that no trusted ch
 
 ## Open items
 
-- Three runs per arm is a demonstration. Ten per arm would make it a measurement.
+- Three runs per arm is a demonstration, and those three ran unisolated. Ten isolated runs
+  per arm would make it a measurement.
 - The reviewer electing to run the verifier is a model decision, 9 for 9 so far and predicted by its own instructions, but not guaranteed.
 - Some runs never escalate after the sandbox blocks the deploy's network call, producing no verdict rather than a refusal.
 - The registry must live outside anything the agent can write. The runs put `SIB_HOME` outside the checkout; nothing enforces that yet.

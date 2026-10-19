@@ -167,7 +167,10 @@ is the safe direction — nothing is authorized.
   baked into the command the reviewer runs.
 
 `--config PATH`
-: Config file to merge into (default: `~/.codex/config.toml`).
+: Config file to merge into. The default follows Codex: `$CODEX_HOME/config.toml` when that
+  variable is set, otherwise `~/.codex/config.toml`. Setting `CODEX_HOME` to a scratch directory
+  is the way to try a configuration without touching the real one, since it relocates config,
+  auth and state together.
 
 `--sib-path PATH`
 : Absolute path to the `sib` binary the reviewer will run (default: the one on `PATH`).

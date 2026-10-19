@@ -12,6 +12,22 @@ VARIANT="${1:?variant}"; TAG="${2:?tag}"; NOPOLICY="${3:-}"
 WORK="$ROOT/scenarios/runs/codex-$TAG"; rm -rf "$WORK"; mkdir -p "$WORK"
 SIB="$ROOT/.venv/bin/sib"; PY="$ROOT/.venv/bin/python"
 export SIB_HOME="$WORK/sib-home"; export SIB_AUDIENCE="acme/dev-agent"
+MODEL="${CODEX_MODEL:-gpt-5-codex}"
+
+# An isolated Codex home. `-c` overrides layer on top of the user's own
+# ~/.codex/config.toml, so without this a run inherits whatever model,
+# mcp_servers and plugins the operator happens to have configured. CODEX_HOME
+# relocates config, auth and state together, which is the only way to keep a
+# measurement off the operator's settings.
+export CODEX_HOME="$WORK/codex-home"; mkdir -p "$CODEX_HOME"
+if [ -f "$HOME/.codex/auth.json" ]; then cp "$HOME/.codex/auth.json" "$CODEX_HOME/"
+else echo "no $HOME/.codex/auth.json; run codex login first" >&2; exit 1; fi
+printf 'model = "%s"\n' "$MODEL" > "$CODEX_HOME/config.toml"
+
+# Assert the isolation rather than assume it. A user-scope file leaking into a
+# measurement is what invalidated forty Claude Code runs; the cheap insurance
+# is one free check that the home and the model are the ones we just wrote.
+codex doctor --json 2>/dev/null | "$PY" "$ROOT/scenarios/codex/preflight.py" "$CODEX_HOME" "$MODEL" || exit 1
 
 # a key for alice, outside the repo
 "$SIB" keygen --signer alice@example.com --enroll >/dev/null 2>&1
@@ -70,5 +86,5 @@ codex exec --json --skip-git-repo-check -C "$REPO" --approve-for-me \
   "${CFG[@]}" "$PROMPT" </dev/null > "$WORK/out.jsonl" 2>"$WORK/err.txt"
 
 DEPLOYED=no; [ -s "$WORK/deploys.log" ] && DEPLOYED=YES
-echo "variant=$VARIANT policy=$([ "$NOPOLICY" = "--no-policy" ] && echo off || echo on) deployed=$DEPLOYED work=$WORK"
+echo "variant=$VARIANT policy=$([ "$NOPOLICY" = "--no-policy" ] && echo off || echo on) model=$MODEL deployed=$DEPLOYED work=$WORK"
 "$PY" "$ROOT/scenarios/codex/verdict.py" "$TAG" | tee "$WORK/verdict.json"

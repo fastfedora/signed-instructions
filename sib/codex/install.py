@@ -20,7 +20,16 @@ from pathlib import Path
 from . import EXTRA_POLICY_PATH, TEMPLATE_PATH, TEMPLATE_SOURCE_COMMIT
 from ..keys_dev import sib_home
 
-DEFAULT_CONFIG = Path.home() / ".codex" / "config.toml"
+def default_config() -> Path:
+    """Where Codex itself reads its configuration.
+
+    CODEX_HOME relocates the whole of it, config and auth and state alike, so
+    an isolated home is the way to try configurations without touching the
+    real one. Honour it here, or the installer would write to ~/.codex while
+    the run under test reads somewhere else.
+    """
+    home = os.environ.get("CODEX_HOME")
+    return (Path(home).expanduser() if home else Path.home() / ".codex") / "config.toml"
 
 
 def toml_literal(s: str) -> str:
@@ -142,7 +151,7 @@ def run_install(config: str | None = None, audience: str | None = None, sib_path
     for w in check_environment(resolved_sib, resolved_home):
         print(f"warning: {w}\n", file=sys.stderr)
 
-    target = Path(config).expanduser() if config else DEFAULT_CONFIG
+    target = Path(config).expanduser() if config else default_config()
     text = target.read_text() if target.exists() else ""
     try:
         current = tomllib.loads(text) if text.strip() else {}
@@ -206,7 +215,8 @@ def run_install(config: str | None = None, audience: str | None = None, sib_path
 def add_arguments(ap) -> None:
     ap.add_argument("--audience", help="the identifier this harness presents to the verifier "
                                        "(default: SIB_AUDIENCE)")
-    ap.add_argument("--config", help=f"config file to append to (default: {DEFAULT_CONFIG})")
+    ap.add_argument("--config", help="config file to merge into "
+                                     "(default: $CODEX_HOME/config.toml, else ~/.codex/config.toml)")
     ap.add_argument("--sib-path", help="absolute path to the sib binary the reviewer will run "
                                        "(default: the one on PATH)")
     ap.add_argument("--home", help="registry directory, as SIB_HOME (default: ~/.sib)")
