@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 
 from .keys_dev import sib_home
-from .keys_webauthn import ALG as WEBAUTHN_ALG, DEFAULT_ALLOWED_AAGUIDS
+from .keys_webauthn import ALG as WEBAUTHN_ALG, DEFAULT_ALLOWED_AAGUIDS, is_model_aaguid
 
 
 class Registry:
@@ -21,7 +21,10 @@ class Registry:
         if self.path.exists():
             data = json.loads(self.path.read_text())
             self.signers = {s["signer"]: s["keys"] for s in data.get("signers", [])}
-            self.extra_aaguids = {k.lower(): v for k, v in (data.get("allowed_aaguids") or {}).items()}
+            # a hand-edited or agent-written entry that names no model is ignored: allowing
+            # the empty or all-zero AAGUID would pass every key with the field missing
+            self.extra_aaguids = {k.lower(): v for k, v in (data.get("allowed_aaguids") or {}).items()
+                                  if is_model_aaguid(k)}
             self.default_audience = data.get("default_audience") or None
 
     def save(self) -> None:
@@ -65,6 +68,10 @@ class Registry:
         return {**DEFAULT_ALLOWED_AAGUIDS, **self.extra_aaguids}
 
     def allow_aaguid(self, aaguid: str, label: str) -> None:
+        if not is_model_aaguid(aaguid):
+            raise ValueError(f"{aaguid!r} is not a model AAGUID: give the UUID `sib enroll` "
+                             f"reported. The empty and all-zero values name no model, and "
+                             f"allowing them would accept every key with the field missing.")
         self.extra_aaguids[aaguid.lower()] = label
 
 

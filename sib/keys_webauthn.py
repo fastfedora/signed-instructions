@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import uuid
 from pathlib import Path
 
 from .b64 import b64u_decode, b64u_encode
@@ -83,9 +84,32 @@ def challenge(signing_header_b64: str, canonical_text: str) -> bytes:
     return hashlib.sha256(signing_input(signing_header_b64, canonical_text)).digest()
 
 
+def is_model_aaguid(aaguid: str) -> bool:
+    """True for a well-formed AAGUID that names a model.
+
+    The all-zero value names no model: many authenticators zero the field under
+    attestation `none`, so it is handled by its own rule in the default list and
+    is never a legitimate registry entry.
+    """
+    try:
+        parsed = uuid.UUID(str(aaguid))
+    except (ValueError, AttributeError, TypeError):
+        return False
+    return str(parsed) != ZERO_AAGUID
+
+
 def aaguid_allowed(key: dict, allowed: dict) -> tuple[bool, str]:
-    """Policy check on the AAGUID recorded at enrollment. Returns (allowed, label)."""
-    aaguid = (key.get("aaguid") or "").lower()
+    """Policy check on the AAGUID recorded at enrollment. Returns (allowed, label).
+
+    A key with no AAGUID, or a malformed one, is refused whatever the allowlist
+    says. Allowing the absence of a model would make every key with the field
+    missing pass, which is what `enroll --public-key` produces, so the check
+    cannot be delegated to the list's contents.
+    """
+    raw = key.get("aaguid")
+    aaguid = (raw or "").lower()
+    if not is_model_aaguid(aaguid) and aaguid != ZERO_AAGUID:
+        return False, aaguid or "(none recorded)"
     if aaguid not in allowed:
         return False, aaguid or "(none recorded)"
     if aaguid == ZERO_AAGUID and not key.get("attestation_verified"):
