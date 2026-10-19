@@ -96,6 +96,10 @@ def cmd_enroll(a):
         reg.add_key(a.signer, a.kid, a.alg, a.public_key, mode="dev" if a.dev else "enforced")
         reg.save()
         print(f"enrolled {a.kid} for {a.signer} in {reg.path}")
+        if not a.dev and a.alg == keys_webauthn.ALG:
+            print("warning: a key enrolled this way records no AAGUID, so its assertions fail with "
+                  "authenticator_not_allowed in enforced mode. Use `sib enroll` without --public-key "
+                  "for a passkey the verifier can accept.", file=sys.stderr)
         return
     from .webauthn_app import enroll_in_browser, BrowserFlowError
     existing = [k["credential_id"] for k in reg.signers.get(a.signer, []) if k.get("credential_id")]
@@ -251,10 +255,19 @@ def cmd_allow_authenticator(a):
     from . import keys_webauthn
     reg = Registry()
     aaguid = a.aaguid.lower()
+    # the shape check comes first: the all-zero value is in the default list, but only
+    # under its own attestation-gated rule, so "already allowed" would mislead
+    if not keys_webauthn.is_model_aaguid(aaguid):
+        raise SystemExit(f"{a.aaguid!r} is not a model AAGUID: give the UUID `sib enroll` reported. "
+                         f"The empty and all-zero values name no model, and allowing them would "
+                         f"accept every key with the field missing.")
     if aaguid in keys_webauthn.DEFAULT_ALLOWED_AAGUIDS:
         print(f"{aaguid} is already allowed: {keys_webauthn.DEFAULT_ALLOWED_AAGUIDS[aaguid]}")
         return
-    reg.allow_aaguid(aaguid, a.label)
+    try:
+        reg.allow_aaguid(aaguid, a.label)
+    except ValueError as e:
+        raise SystemExit(str(e))
     reg.save()
     print(f"allowed {aaguid} ({a.label}) in {reg.path}")
     print("This authenticator's assertions now count as user-verified here. With attestation "

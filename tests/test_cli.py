@@ -328,3 +328,26 @@ def test_install_codex_places_the_signing_skill(sib_home, tmp_path):
     rc, so, se = run(["install", "codex", "--audience", "a/b", "--config", str(home / "config.toml"),
                       "--home", str(tmp_path / "sib"), "--sib-path", "/usr/bin/true", "--yes"])
     assert rc == 0 and str(skill) not in so
+
+
+def test_a_keyless_aaguid_cannot_be_allowlisted(sib_home):
+    """The hole this closes: `enroll --public-key` records no AAGUID, so allowing
+    the empty or all-zero value would accept an agent's own software key."""
+    from sib.keys_webauthn import aaguid_allowed, ZERO_AAGUID
+    for bad in ("", "   ", "not-a-uuid", ZERO_AAGUID):
+        rc, so, se = run(["allow-authenticator", bad, "mine"])
+        assert rc != 0 and "not a model AAGUID" in se, bad
+        assert Registry().extra_aaguids == {}
+    # and the check refuses a keyless entry even if the file is edited by hand
+    reg = Registry()
+    reg.extra_aaguids[""] = "smuggled"
+    reg.save()
+    assert Registry().extra_aaguids == {}                     # dropped on load
+    assert aaguid_allowed({}, {"": "smuggled"}) == (False, "(none recorded)")
+    assert aaguid_allowed({"aaguid": ""}, {"": "smuggled"}) == (False, "(none recorded)")
+
+
+def test_enroll_with_a_raw_public_key_says_it_cannot_verify(sib_home):
+    rc, so, se = run(["enroll", "--signer", "evil@agent", "--kid", "evil@agent#k1",
+                      "--public-key", "AAAA", "--alg", "ES256-webauthn"])
+    assert rc == 0 and "records no AAGUID" in se and "authenticator_not_allowed" in se
