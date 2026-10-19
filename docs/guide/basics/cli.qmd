@@ -134,6 +134,33 @@ keys; with several candidates, the command lists them and asks for `--kid`.
 `--timeout SECONDS`, `--no-browser`, `--browser NAME`
 : As for `enroll`.
 
+### install
+
+Install SIB into an agent harness. Takes the harness as a sub-subcommand.
+
+#### install claude-code
+
+Writes the two hooks, which verify every block in context and hand the harness's own classifier a
+provenance note.
+
+`--settings-json FILE`
+: Write one settings file carrying the hooks and the autoMode rule, for `claude --settings FILE`.
+  The recommended path: both halves stay together and apply only to runs that name the file.
+
+`--project PATH`
+: Merge the hook entries into `PATH/.claude/settings.json` and print the autoMode rule to add to
+  `~/.claude/settings.json` by hand, since Claude Code does not read `autoMode` from project
+  settings.
+
+`--layers LIST`
+: Comma-separated subset of `prompt` and `post` (default: both).
+
+`--no-prose`
+: Omit the autoMode rule.
+
+`--print-auto-mode`
+: Print the autoMode block as JSON and nothing else.
+
 ### verify
 
 Extract and verify every block in a file. Exits with status 0 only when at least one block was

@@ -70,13 +70,16 @@ Once a block verifies on the command line, install the hooks into a project so C
 permission decision sees the manifest:
 
 ```bash
-uv run python -m sib.hooks.claude_code.install --project /path/to/repo
+uv run sib install claude-code --settings-json sib-settings.json
+claude --settings sib-settings.json
 ```
 
-The installer writes the two hooks into the project's `.claude/settings.json` and prints the
-`autoMode` rule to add to your user settings. Set `SIB_AUDIENCE` to the identifier this harness
-presents to the verifier; see [Claude Code](guide/integration/claude-code.qmd) for what each hook
-does.
+The installer writes one file carrying the two hooks and the `autoMode` rule, scoped to runs that
+name it. To install into a repository instead, `--project` writes the hooks to its
+`.claude/settings.json` and prints the rule to add to your user settings. Set `SIB_AUDIENCE` to the
+identifier this harness presents to the verifier; see [Claude
+Code](guide/integration/claude-code.qmd) for the details and how the two installation paths differ
+in reach.
 
 From then on, every tool call runs the verifier, and the harness's own permission classifier
 receives a short note saying which instructions in context are human-signed, who signed them, and
