@@ -223,12 +223,11 @@ def test_open_url_picks_the_configured_browser(monkeypatch, tmp_path):
     script = tmp_path / "fakebrowser.sh"
     script.write_text(f'#!/bin/sh\necho "$@" > "{log}"\n')
     script.chmod(0o755)
-    open_url("http://localhost:7391/z", f"{script} --new-window")
-    import time
-    for _ in range(50):
-        if log.exists() and log.read_text().strip():
-            break
-        time.sleep(0.05)
+    # wait on the child rather than polling for its output: a loaded machine made the
+    # old 2.5s budget expire, and the bare read then failed with FileNotFoundError
+    proc = open_url("http://localhost:7391/z", f"{script} --new-window")
+    assert proc is not None, "a command-shaped browser should be run as a subprocess"
+    assert proc.wait(timeout=60) == 0, "the fake browser exited non-zero"
     assert log.read_text().split() == ["--new-window", "http://localhost:7391/z"]
     with pytest.raises(BrowserFlowError, match="could not open"):
         open_url("http://localhost:7391/z", str(tmp_path / "missing-browser"))
