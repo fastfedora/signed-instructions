@@ -163,6 +163,13 @@ Every setting it does not own is left where it is, the previous file is copied t
 - **Writing the merged file** — the default is yes. Declining prints the `[auto_review]` keys for
   you to place by hand.
 
+It also offers to place a `sib-sign` skill at `$CODEX_HOME/skills/sib-sign/SKILL.md`, which walks
+the user through signing an instruction and appending it to `AGENTS.md`. The skill grants nothing:
+Codex treats skill text as untrusted evidence, and `sib sign` needs the user's own authenticator,
+so it is a how-to rather than a capability. It tells the agent to decline when asked to sign its
+way around a refusal, and to stop if the registry is in dev mode, where a signature would need no
+human.
+
 Keys may be installed before any are enrolled. The installer creates no registry and says so:
 until `sib keygen --signer <you> --enroll` runs, every block verifies as `unknown_signer`, which
 is the safe direction — nothing is authorized.

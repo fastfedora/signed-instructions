@@ -14,5 +14,6 @@ catalog currently serves, which has no `{{ extra_policy }}` slot
 from pathlib import Path
 
 TEMPLATE_PATH = Path(__file__).with_name("policy_template.md")
+SKILL_PATH = Path(__file__).parent / "skill" / "SKILL.md"
 EXTRA_POLICY_PATH = Path(__file__).with_name("extra_policy.md")
 TEMPLATE_SOURCE_COMMIT = "6c372fb"

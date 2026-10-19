@@ -17,9 +17,33 @@ import sys
 import tomllib
 from pathlib import Path
 
-from . import EXTRA_POLICY_PATH, TEMPLATE_PATH, TEMPLATE_SOURCE_COMMIT
+from . import EXTRA_POLICY_PATH, SKILL_PATH, TEMPLATE_PATH, TEMPLATE_SOURCE_COMMIT
 from ..keys_dev import sib_home
 from ..registry import resolve_audience
+
+def codex_home() -> Path:
+    home = os.environ.get("CODEX_HOME")
+    return Path(home).expanduser() if home else Path.home() / ".codex"
+
+
+def install_skill(target_home: Path, assume_yes: bool) -> None:
+    """Place the `sib-sign` skill, which walks the user through signing.
+
+    It grants nothing: Codex treats skill text as untrusted evidence, and
+    `sib sign` needs the user's own authenticator. It is a how-to, so the
+    answer is only ever the user's convenience.
+    """
+    dest = target_home / "skills" / "sib-sign" / "SKILL.md"
+    if dest.exists() and dest.read_text() == SKILL_PATH.read_text():
+        return
+    verb = "Replace" if dest.exists() else "Install"
+    if not (assume_yes or _ask(f"{verb} the sib-sign skill at {dest}?", default=True)):
+        print(f"# Skipped the skill. Copy {SKILL_PATH} to {dest} to add it later.", file=sys.stderr)
+        return
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(SKILL_PATH.read_text())
+    print(f"wrote {dest}")
+
 
 def default_config() -> Path:
     """Where Codex itself reads its configuration.
@@ -204,6 +228,9 @@ def run_install(config: str | None = None, audience: str | None = None, sib_path
         if not print_only:
             print(f"# Not written. Merge the above into {target}, or a project `.codex/config.toml`.",
                   file=sys.stderr)
+
+    if write:
+        install_skill(target.parent, assume_yes)
 
     if reviewer is None and existing_reviewer != "auto_review":
         print("# The reviewer is not enabled in the config. Per run: codex exec --approve-for-me",
