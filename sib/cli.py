@@ -17,7 +17,7 @@ from .envelope import render, extract
 from .header import Header, signing_input, format_time
 from .manifest import build_manifest, render_classifier_note, to_json
 from .nonce_store import NoopNonceStore
-from .registry import Registry, default_mode
+from .registry import Registry, resolve_audience, default_mode
 from .verify import verify_block, clear_lines
 
 
@@ -75,11 +75,17 @@ def cmd_keygen(a):
     kid = a.kid or default_kid(a.signer)
     pub = keys_dev.generate(kid)
     print(f"dev key created for kid {kid}\npublic key: {pub}")
-    if a.enroll:
+    if a.enroll or a.audience:
         reg = Registry()
-        reg.add_key(a.signer, kid, "EdDSA", pub, mode="dev")
+        if a.enroll:
+            reg.add_key(a.signer, kid, "EdDSA", pub, mode="dev")
+        if a.audience:
+            reg.default_audience = a.audience
         reg.save()
-        print(f"enrolled {kid} for {a.signer} in {reg.path} (dev mode, attestation_verified=false)")
+        if a.enroll:
+            print(f"enrolled {kid} for {a.signer} in {reg.path} (dev mode, attestation_verified=false)")
+        if a.audience:
+            print(f"default audience {a.audience} recorded in {reg.path}")
 
 
 def cmd_enroll(a):
@@ -135,17 +141,19 @@ def cmd_sign(a):
     signer, kid = resolve_signer_and_kid(reg, a.signer, a.kid, dev=a.dev)
     key = reg.lookup(kid)[1]
     webauthn = key.get("alg") == keys_webauthn.ALG
-    if webauthn and a.audience is None:
+    audience, aud_source = resolve_audience(a.audience)
+    if webauthn and audience is None:
         raise SystemExit("--audience is required for a passkey-signed block: enforced mode refuses a block with no audience")
     alg, mode = (keys_webauthn.ALG, "enforced") if webauthn else ("EdDSA", "dev")
     ctext = canonicalize(a.canon, text)
     h = Header(alg=alg, kid=kid, canon=a.canon, iss=signer, iat=format_time(now), exp=format_time(exp),
-               jti=b64u_encode(secrets.token_bytes(12)), mode=mode, aud=a.audience)
+               jti=b64u_encode(secrets.token_bytes(12)), mode=mode, aud=audience)
     hb = h.encode()
     # What-you-see-is-what-you-sign: show the exact canonical text and terms before signing.
     print("About to sign (canonical form):", file=sys.stderr)
     print("  " + ctext, file=sys.stderr)
-    print(f"  signer={signer} kid={kid} expires={h.exp} audience={a.audience or 'any'} canon={a.canon} mode={mode}",
+    print(f"  signer={signer} kid={kid} expires={h.exp} canon={a.canon} mode={mode}\n"
+          f"  audience={audience or 'any'}" + (f" (from {aud_source})" if audience else ""),
           file=sys.stderr)
     if webauthn:
         from .webauthn_app import sign_in_browser, BrowserFlowError
@@ -184,7 +192,8 @@ def cmd_verify(a):
     mode = "enforced" if a.enforced else "dev" if a.dev else default_mode(reg)
     if mode == "dev":
         keys_dev.dev_warning()
-    m = _verify_document(doc, a.audience, mode, reg)
+    audience, aud_source = resolve_audience(a.audience)
+    m = _verify_document(doc, audience, mode, reg)
     if a.json:
         print(to_json(m))
     else:
@@ -221,6 +230,20 @@ def cmd_install_codex(a):
                 print_only=a.print_only, assume_yes=a.assume_yes)
 
 
+def cmd_audience(a):
+    reg = Registry()
+    if a.value:
+        reg.default_audience = a.value
+        reg.save()
+        print(f"default audience {a.value} recorded in {reg.path}")
+        return
+    audience, source = resolve_audience(None)
+    if audience is None:
+        raise SystemExit("no audience set. `sib audience <name>` records one; it names this "
+                         "deployment, not the vendor, and must match what signers put in a block")
+    print(f"{audience}   (from {source})")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="sib", description="Signed Instruction Blocks")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -228,6 +251,8 @@ def main(argv=None):
     k.add_argument("--signer", help="signer id; the kid defaults to <signer>#dev-<year>-<month>")
     k.add_argument("--kid", help="key identifier (default: derived from --signer)")
     k.add_argument("--dev", action="store_true", default=True); k.add_argument("--enroll", action="store_true")
+    k.add_argument("--audience", help="record this as the registry's default audience, used by sign, "
+                                      "verify and install when none is given")
     k.set_defaults(fn=cmd_keygen)
     e = sub.add_parser("enroll", help="enroll a passkey in the browser, or add a public key given on the command line")
     e.add_argument("--signer", required=True)
@@ -262,6 +287,11 @@ def main(argv=None):
     cx = harness.add_parser("codex", help="auto-review policy that makes the reviewer verify signatures")
     from .codex.install import add_arguments as _cx_args
     _cx_args(cx); cx.set_defaults(fn=cmd_install_codex)
+
+
+    au = sub.add_parser("audience", help="show or set the registry's default audience")
+    au.add_argument("value", nargs="?", help="the deployment name to record (omit to show)")
+    au.set_defaults(fn=cmd_audience)
     i = sub.add_parser("inspect", help="decode blocks without verifying"); i.add_argument("file"); i.set_defaults(fn=cmd_inspect)
     a = ap.parse_args(argv)
     if a.cmd == "keygen" and a.enroll and not a.signer:

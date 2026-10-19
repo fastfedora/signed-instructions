@@ -252,3 +252,39 @@ def test_install_codex_follows_codex_home(sib_home, tmp_path, monkeypatch):
     rc, so, se = run(["install", "codex", "--audience", "a/b", "--home", str(tmp_path / "sib"),
                       "--sib-path", "/usr/bin/true", "--yes"])
     assert rc == 0 and (tmp_path / "ch" / "config.toml").exists()
+
+
+def test_audience_resolution_order(sib_home, monkeypatch):
+    """A flag wins, then SIB_AUDIENCE, then the registry's recorded default."""
+    from sib.registry import resolve_audience
+    monkeypatch.delenv("SIB_AUDIENCE", raising=False)
+    assert resolve_audience() == (None, "unset")
+    rc, so, se = run(["audience"])
+    assert rc != 0 and "names this deployment, not the vendor" in se
+
+    rc, so, se = run(["audience", "my-company/trevor-dev"])
+    assert rc == 0 and "recorded in" in so
+    assert Registry().default_audience == "my-company/trevor-dev"
+    assert resolve_audience()[0] == "my-company/trevor-dev"
+    rc, so, se = run(["audience"])
+    assert "my-company/trevor-dev" in so and "default_audience in" in so
+
+    monkeypatch.setenv("SIB_AUDIENCE", "my-company/ci")
+    assert resolve_audience() == ("my-company/ci", "SIB_AUDIENCE")
+    assert resolve_audience("my-company/other") == ("my-company/other", "--audience")
+
+
+def test_sign_and_verify_use_the_recorded_audience(sib_home, tmp_path, monkeypatch):
+    monkeypatch.delenv("SIB_AUDIENCE", raising=False)
+    run(["keygen", "--signer", "alice@example.com", "--enroll", "--audience", "my-company/trevor-dev"])
+    assert Registry().default_audience == "my-company/trevor-dev"
+    out = tmp_path / "b.txt"
+    rc, so, se = run(["sign", "--signer", "alice@example.com", "--text", "You may deploy to staging.",
+                      "--out", str(out)])
+    assert rc == 0 and "my-company/trevor-dev" in se       # named, with its source, before signing
+    # the block carries it, and a verifier with no flag accepts it
+    rc, so, se = run(["verify", str(out)])
+    assert rc == 0 and "my-company/trevor-dev" in so
+    # matching is exact: a sibling deployment is not a prefix match
+    rc, so, se = run(["verify", str(out), "--audience", "my-company"])
+    assert rc != 0 and "audience_mismatch" in so

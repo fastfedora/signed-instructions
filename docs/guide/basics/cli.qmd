@@ -55,6 +55,10 @@ Create a dev-mode Ed25519 key under `$SIB_HOME/dev-keys/` and optionally enroll 
 `--enroll`
 : Also add the public key to the registry. Requires `--signer`.
 
+`--audience ID`
+: Record this as the registry's `default_audience`, so `sign`, `verify` and `install` need no
+  audience afterwards. See [audience](#audience) for what the name should be.
+
 `--dev`
 : Accepted for clarity; dev mode is the only mode `keygen` supports.
 
@@ -113,8 +117,9 @@ keys; with several candidates, the command lists them and asks for `--kid`.
 : Validity window from now, as `30m`, `2h` or `1d` (default: `2h`).
 
 `--audience ID`
-: The deployment or harness the block is for. Optional for a dev key; required for a passkey,
-  because a block with no audience is refused in enforced mode.
+: The deployment the block is for. Falls back to `SIB_AUDIENCE` and then the registry's
+  `default_audience`, and the signing preview names which source was used. Optional for a dev key;
+  required for a passkey, because a block with no audience is refused in enforced mode.
 
 `--canon RULE`
 : Canonicalization rule (default: `text/1`). See [Canonicalization](../components/canonicalization.qmd).
@@ -163,8 +168,10 @@ until `sib keygen --signer <you> --enroll` runs, every block verifies as `unknow
 is the safe direction — nothing is authorized.
 
 `--audience ID`
-: The identifier this harness presents to the verifier. Required, or set `SIB_AUDIENCE`. It is
-  baked into the command the reviewer runs.
+: The identifier this harness presents to the verifier, baked into the command the reviewer runs.
+  Falls back to `SIB_AUDIENCE` and then the registry's `default_audience`, so with
+  [`sib audience`](#audience) recorded you need not pass it. The installer prints which source it
+  used.
 
 `--config PATH`
 : Config file to merge into. The default follows Codex: `$CODEX_HOME/config.toml` when that
@@ -197,6 +204,34 @@ authorization, so a deploy is only refused when your own policy says that class 
 authorizing. Add that rule under `[auto_review]` yourself; the installer says so too.
 :::
 
+
+### audience
+
+Show or set the registry's default audience, which `sign`, `verify` and `install` use when no
+audience is given.
+
+`VALUE`
+: The deployment name to record. Omit it to print the audience in force and where it came from.
+
+```bash
+sib audience my-company/trevor-dev     # record it once
+sib audience                           # my-company/trevor-dev   (from default_audience in ~/.sib/registry.json)
+```
+
+The audience names **one deployment, not a vendor or a product**. Matching is exact: there is no
+prefix or wildcard logic, so `my-company` does not accept a block signed for
+`my-company/trevor-dev`. That is the point — a signature minted for your dev agent must not verify
+in CI, in a teammate's checkout, or in anyone else's copy of the same tool. Naming it after the
+harness vendor would give every installation in the world the same audience and the check would
+stop distinguishing anything.
+
+Both halves must agree, because the signer writes the name into the block and the verifier declares
+its own. Three sources are consulted in order, and `sib audience` reports which one won:
+
+1. `--audience` on the command.
+2. `SIB_AUDIENCE` in the environment, which is how a test harness overrides one run.
+3. `default_audience` in the registry, written by `sib audience` or `sib keygen --audience`.
+
 ### verify
 
 Extract and verify every block in a file. Exits with status 0 only when at least one block was
@@ -207,7 +242,8 @@ and dev before that, unless `SIB_MODE` or a flag says otherwise.
 : The file to check, or `-` for standard input.
 
 `--audience ID`
-: The audience of this harness; blocks for another audience fail with `audience_mismatch`.
+: The audience of this harness; blocks for another audience fail with `audience_mismatch`. Falls
+  back to `SIB_AUDIENCE` and then the registry's `default_audience`.
 
 `--enforced`
 : Verify in enforced mode: dev-mode blocks and keys confer nothing.
