@@ -311,3 +311,20 @@ def test_the_allowlist_matches_the_published_names(sib_home):
     assert A["dd4ec289-e01d-41c9-bb89-70fa845d4bf2"] == "iCloud Keychain (Managed)"
     assert A["7409272d-1ff9-4e10-9fc9-ac0019c124fd"] == "YubiKey Bio Series - FIDO Edition"
     assert "bada5566-a7aa-401f-bd96-45619a55120d" not in A        # a software vault stays off
+
+
+def test_install_codex_places_the_signing_skill(sib_home, tmp_path):
+    home = tmp_path / "codex-home"
+    rc, so, se = run(["install", "codex", "--audience", "a/b", "--config", str(home / "config.toml"),
+                      "--home", str(tmp_path / "sib"), "--sib-path", "/usr/bin/true", "--yes"])
+    assert rc == 0
+    skill = home / "skills" / "sib-sign" / "SKILL.md"
+    assert skill.exists() and skill.read_text().startswith("---\nname: \"sib-sign\"")
+    # the skill must not read as a way for the agent to authorize itself
+    body = skill.read_text()
+    assert "Only when the user asks for a signature" in body
+    assert "not authorization" in body
+    # a second run is a no-op rather than a prompt, since the content is identical
+    rc, so, se = run(["install", "codex", "--audience", "a/b", "--config", str(home / "config.toml"),
+                      "--home", str(tmp_path / "sib"), "--sib-path", "/usr/bin/true", "--yes"])
+    assert rc == 0 and str(skill) not in so
