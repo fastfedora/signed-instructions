@@ -202,9 +202,11 @@ generated with.
 ## What the laptop session must do
 
 1. `sib enroll --signer <you>` with Touch ID; check that the registry entry's
-   AAGUID is on the allowlist (iCloud Keychain passkeys report
-   `fbfc3007-154e-4ecc-8c0b-6e020557d7bd`; Chrome's own passkeys
-   `adce0002-35bc-c60a-648b-0b25f1f05503`) and record the attestation format
+   AAGUID is on the allowlist (Apple Passwords reports
+   `fbfc3007-154e-4ecc-8c0b-6e020557d7bd`, managed iCloud Keychain
+   `dd4ec289-e01d-41c9-bb89-70fa845d4bf2`, Chrome's own passkeys
+   `adce0002-35bc-c60a-648b-0b25f1f05503`; a password manager extension will
+   answer with its own AAGUID instead, which is off the list by design) and record the attestation format
    it returned. Then `sib sign`, `sib verify`, and the one-byte edit. Note the
    time from command to envelope.
 

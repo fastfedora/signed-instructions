@@ -205,6 +205,27 @@ authorizing. Add that rule under `[auto_review]` yourself; the installer says so
 :::
 
 
+### allow-authenticator
+
+Add an authenticator model to this registry's `allowed_aaguids`, so its assertions count as
+user-verified here. The default list holds models known to verify their user biometrically;
+widening it is a policy decision, which is why it is a command rather than a flag on `enroll`.
+
+`AAGUID`
+: The AAGUID as `sib enroll` reported it. Case-insensitive. A model already on the default list is
+  reported and nothing is written.
+
+`LABEL`
+: A name for it, used in the warning messages.
+
+```bash
+sib allow-authenticator bada5566-a7aa-401f-bd96-45619a55120d 1Password
+```
+
+Think twice before using it for a password manager. With attestation `none` the AAGUID is the
+authenticator's own claim, and a vault credential syncs rather than staying on one device, so
+"a verified human at this machine" no longer holds.
+
 ### audience
 
 Show or set the registry's default audience, which `sign`, `verify` and `install` use when no

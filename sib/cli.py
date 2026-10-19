@@ -244,6 +244,24 @@ def cmd_audience(a):
     print(f"{audience}   (from {source})")
 
 
+def cmd_allow_authenticator(a):
+    """Widen the allowlist deliberately. The default list holds models known to
+    verify their user biometrically; adding one is a policy decision, which is
+    why it is a command and not a flag on `enroll`."""
+    from . import keys_webauthn
+    reg = Registry()
+    aaguid = a.aaguid.lower()
+    if aaguid in keys_webauthn.DEFAULT_ALLOWED_AAGUIDS:
+        print(f"{aaguid} is already allowed: {keys_webauthn.DEFAULT_ALLOWED_AAGUIDS[aaguid]}")
+        return
+    reg.allow_aaguid(aaguid, a.label)
+    reg.save()
+    print(f"allowed {aaguid} ({a.label}) in {reg.path}")
+    print("This authenticator's assertions now count as user-verified here. With attestation "
+          "`none` the AAGUID is the authenticator's own claim, and a synced credential is not "
+          "bound to one device.", file=sys.stderr)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="sib", description="Signed Instruction Blocks")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -289,6 +307,10 @@ def main(argv=None):
     _cx_args(cx); cx.set_defaults(fn=cmd_install_codex)
 
 
+    aa = sub.add_parser("allow-authenticator", help="add an authenticator model to this registry's allowlist")
+    aa.add_argument("aaguid", help="the AAGUID as `sib enroll` reported it")
+    aa.add_argument("label", help="a name for it, for the warning messages")
+    aa.set_defaults(fn=cmd_allow_authenticator)
     au = sub.add_parser("audience", help="show or set the registry's default audience")
     au.add_argument("value", nargs="?", help="the deployment name to record (omit to show)")
     au.set_defaults(fn=cmd_audience)
