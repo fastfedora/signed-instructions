@@ -2,6 +2,8 @@
 import datetime as dt
 import subprocess
 import sys
+import tomllib
+from pathlib import Path
 
 import pytest
 
@@ -161,3 +163,191 @@ def test_sign_refuses_an_assertion_that_does_not_verify(sib_home, monkeypatch):
     monkeypatch.setattr(sib.webauthn_app, "sign_in_browser", _fake_sign_in_browser(auth))
     rc, out, err = run(["sign", "--signer", "alice@example.com", "--audience", "a", "--text", "x"])
     assert rc != 0 and "authenticator_not_allowed" in err and "no block written" in err and out == ""
+
+
+def test_install_codex_prints_a_usable_fragment(sib_home, tmp_path):
+    rc, so, se = run(["install", "codex", "--audience", "acme/dev-agent",
+                      "--home", str(tmp_path / "sib"), "--sib-path", "/usr/bin/true", "--print"])
+    assert rc == 0
+    assert "[auto_review]" in so and "experimental_policy_template" in so and "extra_policy" in so
+    # the reviewer runs the command literally, so the machine's own values must be baked in
+    assert f"SIB_HOME={tmp_path / 'sib'}" in so and "--audience acme/dev-agent" in so
+    # --print writes nothing and does not offer to
+    assert "appended to" not in so
+
+
+def test_install_codex_writes_and_merges(sib_home, tmp_path):
+    cfg = tmp_path / "config.toml"
+    cfg.write_text("model = \"gpt-6\"\n")
+    args = ["install", "codex", "--audience", "a/b", "--config", str(cfg),
+            "--home", str(tmp_path / "sib"), "--sib-path", "/usr/bin/true", "--yes"]
+    rc, so, se = run(args)
+    assert rc == 0 and "wrote" in so
+    text = cfg.read_text()
+    assert text.startswith("model = ") and "[auto_review]" in text
+    assert 'approvals_reviewer = "auto_review"' in text       # the default answer is yes
+    # a second run replaces our keys rather than refusing, and the result is still one valid file
+    rc, so, se = run(args)
+    assert rc == 0 and "wrote" in so
+    d = tomllib.loads(cfg.read_text())
+    assert d["model"] == "gpt-6" and d["approvals_reviewer"] == "auto_review"
+    assert cfg.read_text().count("extra_policy =") == 1
+    assert (tmp_path / "config.toml.sib-bak").exists()        # the previous file is kept
+
+
+def test_install_codex_leaves_other_settings_alone(sib_home, tmp_path):
+    cfg = tmp_path / "config.toml"
+    cfg.write_text("model = \"gpt-6\"\n\n[auto_review]\nignore_rules = true\n\n"
+                   "[mcp_servers.fs]\ncommand = \"npx\"\n")
+    rc, so, se = run(["install", "codex", "--audience", "a/b", "--config", str(cfg),
+                      "--home", str(tmp_path / "sib"), "--sib-path", "/usr/bin/true", "--yes"])
+    assert rc == 0
+    d = tomllib.loads(cfg.read_text())
+    assert d["auto_review"]["ignore_rules"] is True           # a neighbouring key in our own table
+    assert "extra_policy" in d["auto_review"]
+    assert d["mcp_servers"]["fs"]["command"] == "npx"         # a later table is not swallowed
+
+
+def test_install_codex_keeps_another_reviewer_by_default(sib_home, tmp_path):
+    cfg = tmp_path / "config.toml"
+    cfg.write_text("approvals_reviewer = \"none\"\n")
+    rc, so, se = run(["install", "codex", "--audience", "a/b", "--config", str(cfg),
+                      "--home", str(tmp_path / "sib"), "--sib-path", "/usr/bin/true"])
+    assert rc == 0
+    d = tomllib.loads(cfg.read_text())
+    assert d["approvals_reviewer"] == "none"                  # declining leaves the user's choice
+    assert "extra_policy" in d["auto_review"]                 # the policy still lands
+    assert "--approve-for-me" in se                           # and says how to enable it per run
+
+
+def test_install_codex_asks_before_replacing_our_own_keys(sib_home, tmp_path):
+    cfg = tmp_path / "config.toml"
+    cfg.write_text("[auto_review]\nextra_policy = \"mine\"\n")
+    rc, so, se = run(["install", "codex", "--audience", "a/b", "--config", str(cfg),
+                      "--home", str(tmp_path / "sib"), "--sib-path", "/usr/bin/true"])
+    assert rc != 0 and "left unchanged" in se
+    assert cfg.read_text() == "[auto_review]\nextra_policy = \"mine\"\n"
+
+def test_install_codex_needs_an_audience(sib_home, monkeypatch):
+    monkeypatch.delenv("SIB_AUDIENCE", raising=False)
+    rc, so, se = run(["install", "codex", "--print"])
+    assert rc != 0 and "--audience" in se
+
+
+def test_install_codex_warns_about_a_registry_inside_the_repo(sib_home, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    rc, so, se = run(["install", "codex", "--audience", "a/b", "--home", str(tmp_path / "inside"),
+                      "--sib-path", "/usr/bin/true", "--print"])
+    assert rc == 0 and "inside the working directory" in se
+
+
+def test_install_codex_follows_codex_home(sib_home, tmp_path, monkeypatch):
+    """CODEX_HOME relocates the whole Codex home, so the default must follow it."""
+    from sib.codex.install import default_config
+    monkeypatch.delenv("CODEX_HOME", raising=False)
+    assert default_config() == Path.home() / ".codex" / "config.toml"
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "ch"))
+    assert default_config() == tmp_path / "ch" / "config.toml"
+    # and an install with no --config writes there
+    rc, so, se = run(["install", "codex", "--audience", "a/b", "--home", str(tmp_path / "sib"),
+                      "--sib-path", "/usr/bin/true", "--yes"])
+    assert rc == 0 and (tmp_path / "ch" / "config.toml").exists()
+
+
+def test_audience_resolution_order(sib_home, monkeypatch):
+    """A flag wins, then SIB_AUDIENCE, then the registry's recorded default."""
+    from sib.registry import resolve_audience
+    monkeypatch.delenv("SIB_AUDIENCE", raising=False)
+    assert resolve_audience() == (None, "unset")
+    rc, so, se = run(["audience"])
+    assert rc != 0 and "names this deployment, not the vendor" in se
+
+    rc, so, se = run(["audience", "my-company/trevor-dev"])
+    assert rc == 0 and "recorded in" in so
+    assert Registry().default_audience == "my-company/trevor-dev"
+    assert resolve_audience()[0] == "my-company/trevor-dev"
+    rc, so, se = run(["audience"])
+    assert "my-company/trevor-dev" in so and "default_audience in" in so
+
+    monkeypatch.setenv("SIB_AUDIENCE", "my-company/ci")
+    assert resolve_audience() == ("my-company/ci", "SIB_AUDIENCE")
+    assert resolve_audience("my-company/other") == ("my-company/other", "--audience")
+
+
+def test_sign_and_verify_use_the_recorded_audience(sib_home, tmp_path, monkeypatch):
+    monkeypatch.delenv("SIB_AUDIENCE", raising=False)
+    run(["keygen", "--signer", "alice@example.com", "--enroll", "--audience", "my-company/trevor-dev"])
+    assert Registry().default_audience == "my-company/trevor-dev"
+    out = tmp_path / "b.txt"
+    rc, so, se = run(["sign", "--signer", "alice@example.com", "--text", "You may deploy to staging.",
+                      "--out", str(out)])
+    assert rc == 0 and "my-company/trevor-dev" in se       # named, with its source, before signing
+    # the block carries it, and a verifier with no flag accepts it
+    rc, so, se = run(["verify", str(out)])
+    assert rc == 0 and "my-company/trevor-dev" in so
+    # matching is exact: a sibling deployment is not a prefix match
+    rc, so, se = run(["verify", str(out), "--audience", "my-company"])
+    assert rc != 0 and "audience_mismatch" in so
+
+
+def test_allow_authenticator_widens_the_allowlist(sib_home):
+    """1Password's AAGUID, the real case: off the list, then deliberately added."""
+    from sib.keys_webauthn import aaguid_allowed
+    one_password = "bada5566-a7aa-401f-bd96-45619a55120d"
+    assert aaguid_allowed({"aaguid": one_password}, Registry().allowed_aaguids()) == (False, one_password)
+    rc, so, se = run(["allow-authenticator", one_password, "1Password"])
+    assert rc == 0 and "allowed" in so and "not bound to one device" in se
+    assert aaguid_allowed({"aaguid": one_password}, Registry().allowed_aaguids()) == (True, "1Password")
+    # a model already on the default list is a no-op, not a duplicate entry
+    rc, so, se = run(["allow-authenticator", "ADCE0002-35BC-C60A-648B-0B25F1F05503", "mine"])
+    assert rc == 0 and "already allowed" in so and "Chrome on Mac" in so
+    assert "adce0002-35bc-c60a-648b-0b25f1f05503" not in Registry().extra_aaguids
+
+
+def test_the_allowlist_matches_the_published_names(sib_home):
+    """Guards the audit: these are the names the published lists give, not our glosses."""
+    from sib.keys_webauthn import DEFAULT_ALLOWED_AAGUIDS as A
+    assert A["fbfc3007-154e-4ecc-8c0b-6e020557d7bd"] == "Apple Passwords"
+    assert A["dd4ec289-e01d-41c9-bb89-70fa845d4bf2"] == "iCloud Keychain (Managed)"
+    assert A["7409272d-1ff9-4e10-9fc9-ac0019c124fd"] == "YubiKey Bio Series - FIDO Edition"
+    assert "bada5566-a7aa-401f-bd96-45619a55120d" not in A        # a software vault stays off
+
+
+def test_install_codex_places_the_signing_skill(sib_home, tmp_path):
+    home = tmp_path / "codex-home"
+    rc, so, se = run(["install", "codex", "--audience", "a/b", "--config", str(home / "config.toml"),
+                      "--home", str(tmp_path / "sib"), "--sib-path", "/usr/bin/true", "--yes"])
+    assert rc == 0
+    skill = home / "skills" / "sib-sign" / "SKILL.md"
+    assert skill.exists() and skill.read_text().startswith("---\nname: \"sib-sign\"")
+    # the skill must not read as a way for the agent to authorize itself
+    body = skill.read_text()
+    assert "Only when the user asks for a signature" in body
+    assert "not authorization" in body
+    # a second run is a no-op rather than a prompt, since the content is identical
+    rc, so, se = run(["install", "codex", "--audience", "a/b", "--config", str(home / "config.toml"),
+                      "--home", str(tmp_path / "sib"), "--sib-path", "/usr/bin/true", "--yes"])
+    assert rc == 0 and str(skill) not in so
+
+
+def test_a_keyless_aaguid_cannot_be_allowlisted(sib_home):
+    """The hole this closes: `enroll --public-key` records no AAGUID, so allowing
+    the empty or all-zero value would accept an agent's own software key."""
+    from sib.keys_webauthn import aaguid_allowed, ZERO_AAGUID
+    for bad in ("", "   ", "not-a-uuid", ZERO_AAGUID):
+        rc, so, se = run(["allow-authenticator", bad, "mine"])
+        assert rc != 0 and "not a model AAGUID" in se, bad
+        assert Registry().extra_aaguids == {}
+    # and the check refuses a keyless entry even if the file is edited by hand
+    reg = Registry()
+    reg.extra_aaguids[""] = "smuggled"
+    reg.save()
+    assert Registry().extra_aaguids == {}                     # dropped on load
+    assert aaguid_allowed({}, {"": "smuggled"}) == (False, "(none recorded)")
+    assert aaguid_allowed({"aaguid": ""}, {"": "smuggled"}) == (False, "(none recorded)")
+
+
+def test_enroll_with_a_raw_public_key_says_it_cannot_verify(sib_home):
+    rc, so, se = run(["enroll", "--signer", "evil@agent", "--kid", "evil@agent#k1",
+                      "--public-key", "AAAA", "--alg", "ES256-webauthn"])
+    assert rc == 0 and "records no AAGUID" in se and "authenticator_not_allowed" in se

@@ -55,6 +55,10 @@ Create a dev-mode Ed25519 key under `$SIB_HOME/dev-keys/` and optionally enroll 
 `--enroll`
 : Also add the public key to the registry. Requires `--signer`.
 
+`--audience ID`
+: Record this as the registry's `default_audience`, so `sign`, `verify` and `install` need no
+  audience afterwards. See [audience](#audience) for what the name should be.
+
 `--dev`
 : Accepted for clarity; dev mode is the only mode `keygen` supports.
 
@@ -113,8 +117,9 @@ keys; with several candidates, the command lists them and asks for `--kid`.
 : Validity window from now, as `30m`, `2h` or `1d` (default: `2h`).
 
 `--audience ID`
-: The deployment or harness the block is for. Optional for a dev key; required for a passkey,
-  because a block with no audience is refused in enforced mode.
+: The deployment the block is for. Falls back to `SIB_AUDIENCE` and then the registry's
+  `default_audience`, and the signing preview names which source was used. Optional for a dev key;
+  required for a passkey, because a block with no audience is refused in enforced mode.
 
 `--canon RULE`
 : Canonicalization rule (default: `text/1`). See [Canonicalization](../components/canonicalization.qmd).
@@ -134,6 +139,127 @@ keys; with several candidates, the command lists them and asks for `--kid`.
 `--timeout SECONDS`, `--no-browser`, `--browser NAME`
 : As for `enroll`.
 
+### install
+
+Install SIB into an agent harness. Takes the harness as a sub-subcommand.
+
+#### install codex
+
+Writes the auto-review configuration that makes Codex's reviewer run `sib verify` itself and score
+a verified signature as user authorization.
+
+It merges rather than overwrites, so it is safe to run against a configuration you already use.
+Every setting it does not own is left where it is, the previous file is copied to
+`<config>.sib-bak` before anything is written, and it asks before each change:
+
+- **Setting `approvals_reviewer = "auto_review"`** — the default is yes when the key is absent, and
+  no when you have already set it to something else, since enabling the reviewer should not
+  silently discard a choice you made. Declining still writes the policy; the reviewer can then be
+  enabled per run with `codex exec --approve-for-me`.
+
+- **Replacing `experimental_policy_template` or `extra_policy`** — asked only when a previous run
+  (or you) already set them, and the default is no. Declining writes nothing at all.
+
+- **Writing the merged file** — the default is yes. Declining prints the `[auto_review]` keys for
+  you to place by hand.
+
+It also offers to place a `sib-sign` skill at `$CODEX_HOME/skills/sib-sign/SKILL.md`, which walks
+the user through signing an instruction and appending it to `AGENTS.md`. The skill grants nothing:
+Codex treats skill text as untrusted evidence, and `sib sign` needs the user's own authenticator,
+so it is a how-to rather than a capability. It tells the agent to decline when asked to sign its
+way around a refusal, and to stop if the registry is in dev mode, where a signature would need no
+human.
+
+Keys may be installed before any are enrolled. The installer creates no registry and says so:
+until `sib keygen --signer <you> --enroll` runs, every block verifies as `unknown_signer`, which
+is the safe direction — nothing is authorized.
+
+`--audience ID`
+: The identifier this harness presents to the verifier, baked into the command the reviewer runs.
+  Falls back to `SIB_AUDIENCE` and then the registry's `default_audience`, so with
+  [`sib audience`](#audience) recorded you need not pass it. The installer prints which source it
+  used.
+
+`--config PATH`
+: Config file to merge into. The default follows Codex: `$CODEX_HOME/config.toml` when that
+  variable is set, otherwise `~/.codex/config.toml`. Setting `CODEX_HOME` to a scratch directory
+  is the way to try a configuration without touching the real one, since it relocates config,
+  auth and state together.
+
+`--sib-path PATH`
+: Absolute path to the `sib` binary the reviewer will run (default: the one on `PATH`).
+
+`--home PATH`
+: Registry directory, written into the command as `SIB_HOME` (default: `~/.sib`). Keep it outside
+  any repository; an agent that can write there can enroll its own key.
+
+`--print`
+: Print the configuration and write nothing.
+
+`--yes`
+: Answer yes to every question, for scripting. A reviewer you set to another value is still kept.
+
+::: {.callout-note}
+The configuration pins Codex's own Guardian prompt template, because `auto_review.extra_policy` is
+silently dropped with the template the model catalog serves, which has no `{{ extra_policy }}` slot
+(openai/codex#50309). When that is fixed the template pin can go and `extra_policy` alone will do.
+:::
+
+::: {.callout-important}
+SIB scores authorization, not risk. Codex allows low and medium risk actions whatever the
+authorization, so a deploy is only refused when your own policy says that class of action needs
+authorizing. Add that rule under `[auto_review]` yourself; the installer says so too.
+:::
+
+
+### allow-authenticator
+
+Add an authenticator model to this registry's `allowed_aaguids`, so its assertions count as
+user-verified here. The default list holds models known to verify their user biometrically;
+widening it is a policy decision, which is why it is a command rather than a flag on `enroll`.
+
+`AAGUID`
+: The AAGUID as `sib enroll` reported it. Case-insensitive. A model already on the default list is
+  reported and nothing is written.
+
+`LABEL`
+: A name for it, used in the warning messages.
+
+```bash
+sib allow-authenticator bada5566-a7aa-401f-bd96-45619a55120d 1Password
+```
+
+Think twice before using it for a password manager. With attestation `none` the AAGUID is the
+authenticator's own claim, and a vault credential syncs rather than staying on one device, so
+"a verified human at this machine" no longer holds.
+
+### audience
+
+Show or set the registry's default audience, which `sign`, `verify` and `install` use when no
+audience is given.
+
+`VALUE`
+: The deployment name to record. Omit it to print the audience in force and where it came from.
+
+```bash
+sib audience my-company/trevor-dev     # record it once
+sib audience                           # my-company/trevor-dev   (from default_audience in ~/.sib/registry.json)
+```
+
+The audience names **one deployment, not a vendor or a product**. Matching is exact: there is no
+prefix or wildcard logic, so `my-company` does not accept a block signed for
+`my-company/trevor-dev`. That is the point — a signature minted for your dev agent must not verify
+in CI, in a teammate's checkout, or in anyone else's copy of the same tool. Naming it after the
+harness vendor would give every installation in the world the same audience and the check would
+stop distinguishing anything.
+
+Both halves must agree, because the signer writes the name into the block and the verifier declares
+its own. Three sources are consulted in order, and `sib audience` reports which one won:
+
+1. `--audience` on the command.
+2. `SIB_AUDIENCE` in the environment, which is how a test harness overrides one run.
+3. `default_audience` in the registry, written by `sib audience` or `sib keygen --audience`.
+
 ### verify
 
 Extract and verify every block in a file. Exits with status 0 only when at least one block was
@@ -144,7 +270,8 @@ and dev before that, unless `SIB_MODE` or a flag says otherwise.
 : The file to check, or `-` for standard input.
 
 `--audience ID`
-: The audience of this harness; blocks for another audience fail with `audience_mismatch`.
+: The audience of this harness; blocks for another audience fail with `audience_mismatch`. Falls
+  back to `SIB_AUDIENCE` and then the registry's `default_audience`.
 
 `--enforced`
 : Verify in enforced mode: dev-mode blocks and keys confer nothing.
