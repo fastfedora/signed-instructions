@@ -19,6 +19,7 @@ from pathlib import Path
 
 from . import EXTRA_POLICY_PATH, TEMPLATE_PATH, TEMPLATE_SOURCE_COMMIT
 from ..keys_dev import sib_home
+from ..registry import resolve_audience
 
 def default_config() -> Path:
     """Where Codex itself reads its configuration.
@@ -142,12 +143,16 @@ def check_environment(sib_path: str, home: Path) -> list[str]:
 
 def run_install(config: str | None = None, audience: str | None = None, sib_path: str | None = None,
                 home: str | None = None, print_only: bool = False, assume_yes: bool = False) -> None:
-    audience = audience or os.environ.get("SIB_AUDIENCE")
+    audience, audience_source = resolve_audience(audience)
     if not audience:
-        raise SystemExit("give --audience (or set SIB_AUDIENCE): the reviewer needs it to verify blocks")
+        raise SystemExit("no audience: the reviewer needs one to verify blocks. Record it once with "
+                         "`sib audience <name>`, or give --audience. It names this deployment, not "
+                         "the vendor, and must match what signers put in a block.")
     resolved_home = Path(home).expanduser() if home else sib_home()
     resolved_sib = sib_path or shutil.which("sib") or str(Path(sys.executable).with_name("sib"))
 
+    print(f"# Audience {audience} (from {audience_source}), baked into the reviewer's command.",
+          file=sys.stderr)
     for w in check_environment(resolved_sib, resolved_home):
         print(f"warning: {w}\n", file=sys.stderr)
 
@@ -214,7 +219,7 @@ def run_install(config: str | None = None, audience: str | None = None, sib_path
 
 def add_arguments(ap) -> None:
     ap.add_argument("--audience", help="the identifier this harness presents to the verifier "
-                                       "(default: SIB_AUDIENCE)")
+                                       "(default: SIB_AUDIENCE, else the registry's default_audience)")
     ap.add_argument("--config", help="config file to merge into "
                                      "(default: $CODEX_HOME/config.toml, else ~/.codex/config.toml)")
     ap.add_argument("--sib-path", help="absolute path to the sib binary the reviewer will run "
