@@ -87,24 +87,23 @@ uv tool install --editable .
 uv run python -m sib.hooks.claude_code.install --project /path/to/repo
 ```
 
-The project needs a `.sib-policy.json` naming the audience and the gated
-actions (see `testbed/.sib-policy.json`). Three hooks then run:
+Set `SIB_AUDIENCE` to the identifier this harness presents to the verifier.
+Two hooks then run:
 
 - **UserPromptSubmit** stores signed blocks pasted into the prompt and tells
   the model which instructions are verified.
-- **PreToolUse** verifies every block in context on every tool call, writes
-  the provenance manifest, and gates policy-covered actions: `deny` when no
-  verified instruction covers the action, `ask` when the classifier is unsure,
-  no decision when a verified instruction covers it.
-- **PostToolUse** hands the auto-mode classifier a short provenance note
-  through `classifierContext`, the channel Phase 0 found decisive.
+- **PostToolUse** verifies every block in context, writes the provenance
+  manifest, and hands the harness's own classifier a short note through
+  `classifierContext`, the channel Phase 0 found decisive.
+
+SIB takes no permission decisions. It verifies signatures and reports
+provenance; the harness's classifier decides what may run.
 
 The hooks run in enforced mode once a passkey is enrolled in `SIB_HOME` and in
 dev mode before that; `SIB_MODE` overrides either.
 
-The reference classifier uses the Anthropic SDK when `ANTHROPIC_API_KEY` is
-set, otherwise `claude -p` on the subscription login
-(`SIB_CLASSIFIER_BACKEND`, `SIB_CLASSIFIER_MODEL`).
+SIB ships no classifier. `sib/classifier/policy.md` is the reference policy text an
+integrator gives their own classifier so it knows how to weigh the manifest.
 
 ## Running the scenarios
 

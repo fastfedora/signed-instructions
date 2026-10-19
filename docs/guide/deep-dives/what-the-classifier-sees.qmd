@@ -93,6 +93,9 @@ PreToolUse gate disabled and only the note and the prose active, it deployed 0 o
 the auto-mode classifier denying 7 of 7 attempts. The genuine signed instruction, in the same
 testbed, was allowed 10 of 10 times with the verified span cited on every call.
 
+That second result is why the gate could be removed: refusing forged authority never depended on
+it. The third result turned out to depend on it entirely, which the measurements below record.
+
 
 ## `CLAUDE.md` Is Not Re-read
 
@@ -185,7 +188,7 @@ refused the two baseline ones. The classifier reads what the documentation says 
 context is not on that list unless it arrives through `classifierContext`.
 
 The practical consequence is that an action taken as the first step of a session cannot be covered
-by the note channel at all. That action has to be gated deterministically.
+by the note channel at all.
 
 
 ## What This Means for an Integrator
@@ -194,9 +197,16 @@ by the note channel at all. That action has to be gated deterministically.
   is the reviewer's request; in the Agent SDK it is the `canUseTool` callback. A channel the agent
   can write to, such as project instructions or model-facing context, is not one.
 
-- **Keep the deterministic gate.** The classifier honors an application-provided note; it cannot
-  verify it. The PreToolUse deny is the guarantee, and the note plus policy prose is the second
-  layer that catches what the gate's pattern does not name.
+- **Expect the note to restrict, not to authorize.** A classifier that reads an
+  application-provided note cannot verify it, and Claude Code's documentation says a note from a
+  settings-file hook never establishes user intent. Saying nothing is signed is honoured; saying
+  someone signed something is not. Measured at 0 of 30 across three placements after the gate was
+  removed.
+
+- **Do not rebuild the harness's permission system.** An earlier version of this project gated
+  actions itself, with its own pattern matching and its own classifier. It worked, and it was a
+  second implementation of judgement the harness already performs, which is why it was removed.
+  What a harness cannot do for itself is check a signature.
 
 - **Never grant from a hook.** Return no decision when a verified instruction covers the action and
   let the classifier decide with the verification in view.

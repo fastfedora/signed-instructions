@@ -62,8 +62,8 @@ The clock skew is 60 seconds and applies to `iat` only. Expiry is strict.
 ## Statuses
 
 Every status except `verified` is a failure, and every failure still reports the signer, key,
-times, audience and canonical text the block claims, labelled by the status, so a gate or a
-classifier can say what it is refusing and why. The exception is `malformed` before the header
+times, audience and canonical text the block claims, labelled by the status, so a classifier can
+say what it is refusing and why. The exception is `malformed` before the header
 decodes, where only the text as written is available.
 
 | Status | Meaning |

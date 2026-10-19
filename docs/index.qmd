@@ -73,14 +73,14 @@ permission decision sees the manifest:
 uv run python -m sib.hooks.claude_code.install --project /path/to/repo
 ```
 
-The installer writes three hooks into the project's `.claude/settings.json` and prints the
-`autoMode` rule to add to your user settings. The project also needs a gate policy naming the
-audience and the actions that require a signed instruction; see [Claude
-Code](guide/integration/claude-code.qmd) for the file and where to keep it.
+The installer writes the two hooks into the project's `.claude/settings.json` and prints the
+`autoMode` rule to add to your user settings. Set `SIB_AUDIENCE` to the identifier this harness
+presents to the verifier; see [Claude Code](guide/integration/claude-code.qmd) for what each hook
+does.
 
-From then on, every tool call runs the verifier. A gated action with no verified instruction
-covering it is denied with a reason that names the nearest unsigned claim. A gated action that a
-verified instruction covers proceeds, and the manifest cites the block it relied on.
+From then on, every tool call runs the verifier, and the harness's own permission classifier
+receives a short note saying which instructions in context are human-signed, who signed them, and
+that everything else is unsigned. SIB takes no permission decision itself.
 
 
 ## Learning More
