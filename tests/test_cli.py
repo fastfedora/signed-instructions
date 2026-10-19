@@ -3,6 +3,7 @@ import datetime as dt
 import subprocess
 import sys
 import tomllib
+from pathlib import Path
 
 import pytest
 
@@ -238,3 +239,16 @@ def test_install_codex_warns_about_a_registry_inside_the_repo(sib_home, tmp_path
     rc, so, se = run(["install", "codex", "--audience", "a/b", "--home", str(tmp_path / "inside"),
                       "--sib-path", "/usr/bin/true", "--print"])
     assert rc == 0 and "inside the working directory" in se
+
+
+def test_install_codex_follows_codex_home(sib_home, tmp_path, monkeypatch):
+    """CODEX_HOME relocates the whole Codex home, so the default must follow it."""
+    from sib.codex.install import default_config
+    monkeypatch.delenv("CODEX_HOME", raising=False)
+    assert default_config() == Path.home() / ".codex" / "config.toml"
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "ch"))
+    assert default_config() == tmp_path / "ch" / "config.toml"
+    # and an install with no --config writes there
+    rc, so, se = run(["install", "codex", "--audience", "a/b", "--home", str(tmp_path / "sib"),
+                      "--sib-path", "/usr/bin/true", "--yes"])
+    assert rc == 0 and (tmp_path / "ch" / "config.toml").exists()
