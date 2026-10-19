@@ -189,18 +189,29 @@ User verification is not biometric verification
 
 The allowlist is policy
 : To narrow the gap, the verifier accepts only authenticators whose AAGUID is on a list of
-  models known to verify users biometrically (`sib.keys_webauthn.DEFAULT_ALLOWED_AAGUIDS`: iCloud
-  Keychain and Chrome on macOS, Windows Hello, the YubiKey Bio series). A registry can add
-  entries under `allowed_aaguids`. The list was compiled from the public passkey AAGUID
-  list and should be checked against it before an enforced deployment relies on it. It is only
-  as strong as the attestation behind the AAGUID: an authenticator with attestation `none` can
-  report any AAGUID it likes. The all-zero AAGUID, which Apple's `apple` attestation reports, is
+  models known to verify users biometrically (`sib.keys_webauthn.DEFAULT_ALLOWED_AAGUIDS`: Apple
+  Passwords, iCloud Keychain (Managed), Chrome on Mac, Windows Hello, and every YubiKey Bio
+  model). A registry adds entries under `allowed_aaguids`, or with
+  [`sib allow-authenticator`](../basics/cli.qmd#allow-authenticator). The list was audited on
+  19 October 2026 against `passkeydeveloper/passkey-authenticator-aaguids`, whose `aaguid.json`
+  names the platform providers and whose FIDO MDS derived `combined_aaguid.json` names the
+  hardware models; re-audit before an enforced deployment relies on it, because vendors add
+  models and rename them. It is only as strong as the attestation behind the AAGUID: an
+  authenticator with attestation `none` can report any AAGUID it likes. The all-zero AAGUID, which Apple's `apple` attestation reports, is
   accepted only for a key whose attestation was verified, since many authenticators zero the
   field under attestation `none`.
 
 Passkeys sync
 : An iCloud Keychain passkey exists on every device signed in to the signer's Apple account. The
   key is hardware-bound on each of them, but "the key is on one laptop" does not hold.
+
+A password manager may answer instead
+: A manager's browser extension can capture the WebAuthn prompt and create the passkey in its own
+  vault rather than the platform authenticator. The credential is then a synced secret in software,
+  bound to no device, and it reports its own AAGUID with attestation `none`. Such models are
+  deliberately absent from the default allowlist, so enrollment succeeds and both signing and
+  verification then fail with `authenticator_not_allowed`, naming the AAGUID. `--browser` selects a
+  browser whose prompt the platform answers; `sib allow-authenticator` accepts one on purpose.
 
 If the allowlist is judged insufficient, the options are enterprise attestation to pin
 authenticator models, or a Secure Enclave key created with a biometry-only access-control flag

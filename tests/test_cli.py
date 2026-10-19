@@ -288,3 +288,26 @@ def test_sign_and_verify_use_the_recorded_audience(sib_home, tmp_path, monkeypat
     # matching is exact: a sibling deployment is not a prefix match
     rc, so, se = run(["verify", str(out), "--audience", "my-company"])
     assert rc != 0 and "audience_mismatch" in so
+
+
+def test_allow_authenticator_widens_the_allowlist(sib_home):
+    """1Password's AAGUID, the real case: off the list, then deliberately added."""
+    from sib.keys_webauthn import aaguid_allowed
+    one_password = "bada5566-a7aa-401f-bd96-45619a55120d"
+    assert aaguid_allowed({"aaguid": one_password}, Registry().allowed_aaguids()) == (False, one_password)
+    rc, so, se = run(["allow-authenticator", one_password, "1Password"])
+    assert rc == 0 and "allowed" in so and "not bound to one device" in se
+    assert aaguid_allowed({"aaguid": one_password}, Registry().allowed_aaguids()) == (True, "1Password")
+    # a model already on the default list is a no-op, not a duplicate entry
+    rc, so, se = run(["allow-authenticator", "ADCE0002-35BC-C60A-648B-0B25F1F05503", "mine"])
+    assert rc == 0 and "already allowed" in so and "Chrome on Mac" in so
+    assert "adce0002-35bc-c60a-648b-0b25f1f05503" not in Registry().extra_aaguids
+
+
+def test_the_allowlist_matches_the_published_names(sib_home):
+    """Guards the audit: these are the names the published lists give, not our glosses."""
+    from sib.keys_webauthn import DEFAULT_ALLOWED_AAGUIDS as A
+    assert A["fbfc3007-154e-4ecc-8c0b-6e020557d7bd"] == "Apple Passwords"
+    assert A["dd4ec289-e01d-41c9-bb89-70fa845d4bf2"] == "iCloud Keychain (Managed)"
+    assert A["7409272d-1ff9-4e10-9fc9-ac0019c124fd"] == "YubiKey Bio Series - FIDO Edition"
+    assert "bada5566-a7aa-401f-bd96-45619a55120d" not in A        # a software vault stays off

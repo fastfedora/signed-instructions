@@ -30,14 +30,38 @@ ZERO_AAGUID = "00000000-0000-0000-0000-000000000000"
 # list is policy, not proof: an AAGUID is self-reported unless the enrollment's
 # attestation was verified. The zero AAGUID, which Apple's `apple` attestation
 # reports, is accepted only on an enrollment with verified attestation.
+# Authenticator models known to verify their user biometrically, with the names the
+# published lists give them. Audited 19 October 2026 against
+# passkeydeveloper/passkey-authenticator-aaguids: aaguid.json for the platform
+# providers and combined_aaguid.json (FIDO MDS derived) for every YubiKey Bio model.
+# Re-audit before an enforced deployment relies on it; vendors add models and rename
+# them. A registry adds its own under `allowed_aaguids`, or `sib allow-authenticator`.
+# Deliberately absent: software password-manager vaults such as 1Password
+# (bada5566-a7aa-401f-bd96-45619a55120d), whose key is not bound to one device.
 DEFAULT_ALLOWED_AAGUIDS = {
-    "fbfc3007-154e-4ecc-8c0b-6e020557d7bd": "iCloud Keychain (Apple platform authenticator)",
-    "adce0002-35bc-c60a-648b-0b25f1f05503": "Chrome on macOS (Touch ID)",
-    "08987058-cadc-4b81-b6e1-30de50dcbe96": "Windows Hello (hardware-backed)",
-    "9ddd1817-af5a-4672-a2b9-3e3dd95000a9": "Windows Hello (VBS-backed)",
-    "6028b017-b1d4-4c02-b4b3-afcdafc96bb2": "Windows Hello (software-backed)",
-    "d8522d9f-575b-4866-88a9-ba99fa02f35b": "YubiKey Bio Series (FIDO edition)",
-    "7409272d-1ff9-4e10-9fc9-ac0019c124fd": "YubiKey Bio Series (multi-protocol edition)",
+    "fbfc3007-154e-4ecc-8c0b-6e020557d7bd": "Apple Passwords",
+    "dd4ec289-e01d-41c9-bb89-70fa845d4bf2": "iCloud Keychain (Managed)",
+    "adce0002-35bc-c60a-648b-0b25f1f05503": "Chrome on Mac",
+    "08987058-cadc-4b81-b6e1-30de50dcbe96": "Windows Hello",
+    "9ddd1817-af5a-4672-a2b9-3e3dd95000a9": "Windows Hello",
+    "6028b017-b1d4-4c02-b4b3-afcdafc96bb2": "Windows Hello",
+    "9dd8d593-2213-438a-97f8-d6b813d51c27": "YubiKey Bio Fido Edition (Consumer Profile)",
+    "add92433-0d69-4026-8166-29b25bce64e9": "YubiKey Bio Fido Edition (Enterprise Profile)",
+    "ba0a9266-40d8-4048-9786-d710b5474752": "YubiKey Bio Multi-protocol Edition (Consumer Profile)",
+    "9806a2c8-c0da-478e-b4ca-620005d34182": "YubiKey Bio Multi-protocol Edition (Consumer Profile) 1VDJSN-2",
+    "dc5e949d-f939-43b3-9877-a85c7186b753": "YubiKey Bio Multi-protocol Edition (Enterprise Profile)",
+    "7409272d-1ff9-4e10-9fc9-ac0019c124fd": "YubiKey Bio Series - FIDO Edition",
+    "d8522d9f-575b-4866-88a9-ba99fa02f35b": "YubiKey Bio Series - FIDO Edition",
+    "dd86a2da-86a0-4cbe-b462-4bd31f57bc6f": "YubiKey Bio Series - FIDO Edition",
+    "83c47309-aabb-4108-8470-8be838b573cb": "YubiKey Bio Series - FIDO Edition (Enterprise Profile)",
+    "8c39ee86-7f9a-4a95-9ba3-f6b097e5c2ee": "YubiKey Bio Series - FIDO Edition (Enterprise Profile)",
+    "ad08c78a-4e41-49b9-86a2-ac15b06899e2": "YubiKey Bio Series - FIDO Edition (Enterprise Profile)",
+    "34744913-4f57-4e6e-a527-e9ec3c4b94e6": "YubiKey Bio Series - Multi-protocol Edition",
+    "7d1351a6-e097-4852-b8bf-c9ac5c9ce4a3": "YubiKey Bio Series - Multi-protocol Edition",
+    "90636e1f-ef82-43bf-bdcf-5255f139d12f": "YubiKey Bio Series - Multi-protocol Edition",
+    "6ec5cff2-a0f9-4169-945b-f33b563f7b99": "YubiKey Bio Series - Multi-protocol Edition (Enterprise Profile)",
+    "97e6a830-c952-4740-95fc-7c78dc97ce47": "YubiKey Bio Series - Multi-protocol Edition (Enterprise Profile)",
+    "58276709-bb4b-4bb3-baf1-60eea99282a7": "YubiKey Bio Series - Multi-protocol Edition 1VDJSN",
     ZERO_AAGUID: "Apple platform authenticator with `apple` attestation (verified attestation required)",
 }
 
