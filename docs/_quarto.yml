@@ -140,6 +140,8 @@ website:
           contents:
             - text: Attack Catalog
               file: project/attacks.qmd
+            - text: SIB in Codex
+              file: project/codex-integration.qmd
             - text: Experiment Results
               file: project/results.qmd
      - title: Specification
