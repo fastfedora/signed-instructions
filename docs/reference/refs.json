@@ -6,6 +6,7 @@
   "extract": "envelope.qmd#extract",
   "generate": "keys_dev.qmd#generate",
   "default_mode": "registry.qmd#default_mode",
+  "resolve_audience": "registry.qmd#resolve_audience",
   "verify_block": "verify.qmd#verify_block",
   "render_classifier_note": "manifest.qmd#render_classifier_note",
   "load_policy_text": "classifier.qmd#load_policy_text",
@@ -13,8 +14,7 @@
   "harness_audience": "hooks.qmd#harness_audience",
   "run_hook": "hooks.qmd#run_hook",
   "transcript_blocks": "hooks.qmd#transcript_blocks",
-  "add_arguments": "hooks.qmd#add_arguments",
-  "run_install": "hooks.qmd#run_install",
+  "cmd_allow_authenticator": "cli.qmd#cmd_allow_authenticator",
   "default_kid": "cli.qmd#default_kid",
   "passkey_kid": "cli.qmd#passkey_kid",
   "resolve_signer_and_kid": "cli.qmd#resolve_signer_and_kid"
