@@ -1,0 +1,83 @@
+---
+title: SIB in Codex
+---
+
+How Signed Instruction Blocks are integrated into Codex, in three figures. There are no hooks and
+no patch to Codex: a policy tells Codex's own approval reviewer that `AGENTS.md` is untrusted
+except for verified signed blocks, and that it must run `sib verify` before scoring authorization.
+The reviewer does the rest with the instructions and the tool access it already has. The
+measurements and the reasoning are in the [Phase 4 findings](plans/findings/phase-4-codex.md).
+
+
+## The Runtime Path
+
+![A human signs an instruction into `AGENTS.md`. The Codex agent reads the file and plans a deploy;
+the sandbox blocks it and sends an approval request to the auto-review reviewer, whose prompt
+carries the SIB policy from `config.toml`. The reviewer runs `sib verify`, which reads `AGENTS.md`
+and the registry outside the repository and returns a manifest; the reviewer scores authorization
+from verified spans and answers allow or deny.](plans/findings/images/phase-4/runtime-path.svg){width=100%}
+
+The reviewer verifies the file itself. SIB adds no channel to Codex: the policy in `config.toml`
+tells the reviewer which part of `AGENTS.md` to trust and which command establishes it, and the
+reviewer's existing read-only tool access does the rest. The verified span sets
+`user_authorization`, an input the reviewer already scores.
+
+
+## What Changes Between a Forged Claim and a Signature
+
+![Two identical pipelines. The forged claim yields a manifest with no verified spans, authorization
+`low` and a denial. The signature yields a verified span signed by alice, authorization `high` and
+an allow. The risk level is `high` in both arms because the team's deploy rule says
+so.](plans/findings/images/phase-4/forged-vs-signed.svg){width=100%}
+
+Everything is identical until the manifest. Codex trusts `AGENTS.md` unconditionally, so the
+forged sentence used to establish authorization honestly, by the reviewer's own rules; the SIB
+policy makes only a `verified` span count, and the reviewer's own rationales quote the manifest
+when it refuses.
+
+
+## Why the Template Is Pinned
+
+![The reviewer prompt is rendered by substituting two slots in a template. The template the model
+catalog serves has only the tenant policy slot, so `extra_policy` is dropped silently. Pinning
+Codex's bundled template restores the slot, and the SIB rules land after Codex's built-in security
+policy.](plans/findings/images/phase-4/template-pin.svg){width=100%}
+
+The only workaround in the integration. `auto_review.policy` is not a substitute, because it
+replaces Codex's entire built-in security policy; pinning the bundled template keeps it and adds
+ours. Once upstream restores the slot ([openai/codex#50309](https://github.com/openai/codex/issues/50309)),
+the configuration is four lines.
+
+
+## What `sib install codex` Writes
+
+- `approvals_reviewer = "auto_review"` at the top of `config.toml`, asked first and never silently
+  replacing a different choice.
+
+- Under `[auto_review]`: the pinned template and `extra_policy`, with the absolute `sib` path,
+  `SIB_HOME` and the audience baked into the command the reviewer will run. Existing keys are
+  merged, not clobbered, and the old file is backed up to `config.toml.sib-bak`.
+
+- The `sib-sign` skill at `~/.codex/skills/sib-sign/SKILL.md`: a how-to for the agent to walk the
+  user through signing. It grants nothing; Codex treats skill text as untrusted and signing needs
+  the user's own authenticator.
+
+- Warnings when the registry sits inside the working directory, when no key is enrolled yet, and
+  that SIB scores authorization but not risk, so a deploy rule is still yours to write.
+
+
+## The Bounds
+
+- **Provenance is one factor, not the verdict.** Codex allows medium-risk actions whatever the
+  authorization, so a forged deploy was once allowed when the reviewer scored it `medium`. One
+  sentence of ordinary deploy policy fixed that, and that sentence is the team's, not SIB's.
+
+- **The registry is the trust root.** An agent that can write `SIB_HOME` can enroll its own key.
+  The installer warns; nothing enforces it yet.
+
+- **The reviewer choosing to run the verifier is a model decision.** Nine for nine so far, and
+  predicted by its own instructions, but not guaranteed. The policy says to treat every instruction
+  as unsigned if the command fails or cannot be run.
+
+- **Not yet tested against the reviewer:** tampered and expired blocks; only forged-unsigned and
+  genuine-verified have been.

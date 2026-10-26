@@ -19,24 +19,28 @@ class BrowserFlowError(RuntimeError):
     pass
 
 
-def open_url(url: str, browser: str | None = None) -> None:
+def open_url(url: str, browser: str | None = None) -> subprocess.Popen | None:
     """Open the page in the default browser, or in `browser` (else
     `SIB_BROWSER`): a name the `webbrowser` module knows, such as `safari`,
     `chrome` or `firefox`, or a command to run with the URL appended, such
     as `open -a Safari`. The default browser may lack passkey support, or a
-    password manager in it may capture the prompt."""
+    password manager in it may capture the prompt.
+
+    Returns the child process when a command was run, so a caller can wait on
+    it, and None when the `webbrowser` module handled the URL itself.
+    """
     browser = browser or os.environ.get("SIB_BROWSER")
     if not browser:
         webbrowser.open(url)
-        return
+        return None
     try:
         webbrowser.get(browser).open(url)
-        return
+        return None
     except webbrowser.Error:
         pass
     try:
-        subprocess.Popen(shlex.split(browser) + [url], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                         stderr=subprocess.DEVNULL)
+        return subprocess.Popen(shlex.split(browser) + [url], stdin=subprocess.DEVNULL,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except OSError as e:
         raise BrowserFlowError(f"could not open the browser {browser!r}: {e}")
 

@@ -1,5 +1,15 @@
 project:
   type: website
+  # The plan and findings pages are copied in by the pre-render step and are
+  # gitignored, and Quarto skips gitignored inputs unless they are listed here.
+  render:
+    - "*.qmd"
+    - "guide/**/*.qmd"
+    - "spec/**/*.qmd"
+    - "reference/**/*.qmd"
+    - "contributing/**/*.qmd"
+    - "project/*.qmd"
+    - "project/plans/**/*.md"
   pre-render:
     - scripts/pre-render.py
     - reference/filter/sidebar.py
@@ -124,10 +134,14 @@ website:
               file: project/plans/findings/phase-1.md
             - text: Phase 2
               file: project/plans/findings/phase-2.md
+            - text: Phase 4
+              file: project/plans/findings/phase-4-codex.md
         - section: "Attacks"
           contents:
             - text: Attack Catalog
               file: project/attacks.qmd
+            - text: SIB in Codex
+              file: project/codex-integration.qmd
             - text: Experiment Results
               file: project/results.qmd
      - title: Specification
