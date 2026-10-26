@@ -36,7 +36,7 @@ def copy_plans() -> None:
         dst.parent.mkdir(parents=True, exist_ok=True)
         dst.write_text(convert_plan(src.read_text(), rel))
     # screenshots the findings memos embed
-    for src in sorted(PLANS_SRC.rglob("*.png")):
+    for src in sorted(p for ext in ("*.png", "*.svg") for p in PLANS_SRC.rglob(ext)):
         dst = PLANS_DST / src.relative_to(PLANS_SRC)
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)

@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="600" font-family="IBM Plex Sans, Helvetica Neue, Arial, sans-serif" viewBox="0 0 1120 600" role="img" aria-label="A human signs an instruction into AGENTS.md. The Codex agent reads the file and plans a deploy; the sandbox blocks it and sends an approval request to the auto-review reviewer, whose prompt carries the SIB policy from config.toml. The reviewer runs sib verify, which reads AGENTS.md and the registry outside the repository and returns a manifest; the reviewer scores user authorization from verified spans and answers allow or deny.">
+      <rect width="1120" height="600" fill="#ffffff"/>
+      <defs>
+        <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="#1d2330"/>
+        </marker>
+      </defs>
+      <g fill="none" stroke="#1d2330" stroke-width="1.4">
+        <!-- Signer -->
+        <rect x="40" y="60" width="180" height="70" rx="4"/>
+        <!-- AGENTS.md -->
+        <rect x="300" y="40" width="260" height="140" rx="4"/>
+        <rect x="316" y="84" width="228" height="36" rx="3" stroke-dasharray="4 3" stroke="#5d6578"/>
+        <rect x="316" y="130" width="228" height="36" rx="3" stroke="#0f6e56" stroke-width="2" fill="#d9efe7"/>
+        <!-- config.toml -->
+        <rect x="700" y="40" width="380" height="140" rx="4"/>
+        <!-- Agent -->
+        <rect x="300" y="250" width="260" height="96" rx="4"/>
+        <!-- Reviewer -->
+        <rect x="700" y="236" width="380" height="124" rx="4" stroke-width="2"/>
+        <!-- Verifier -->
+        <rect x="700" y="450" width="210" height="90" rx="4"/>
+        <!-- Registry -->
+        <rect x="950" y="450" width="130" height="90" rx="4"/>
+        <!-- Repository boundary -->
+        <rect x="284" y="22" width="292" height="340" rx="6" stroke-dasharray="6 4" stroke="#5d6578"/>
+      </g>
+
+      <!-- Arrows -->
+      <g fill="none" stroke="#1d2330" stroke-width="1.4" marker-end="url(#arr)">
+        <line x1="220" y1="95" x2="298" y2="95"/>
+        <line x1="430" y1="180" x2="430" y2="248"/>
+        <line x1="890" y1="180" x2="890" y2="234"/>
+        <line x1="560" y1="282" x2="698" y2="282"/>
+        <line x1="700" y1="322" x2="562" y2="322" stroke-dasharray="5 3"/>
+        <line x1="780" y1="360" x2="780" y2="448"/>
+        <line x1="850" y1="450" x2="850" y2="362"/>
+        <line x1="910" y1="495" x2="948" y2="495"/>
+      </g>
+
+      <!-- Text -->
+      <g fill="#1d2330" font-size="13">
+        <text x="130" y="88" text-anchor="middle" font-weight="600">Signer</text>
+        <text x="130" y="108" text-anchor="middle" font-size="11.5" fill="#5d6578">a named human with a passkey</text>
+        <text x="259" y="84" text-anchor="middle" font-family="IBM Plex Mono, Menlo, Consolas, monospace" font-size="11.5">sib sign</text>
+        <text x="259" y="114" text-anchor="middle" font-size="11" fill="#5d6578">appends the block</text>
+
+        <text x="296" y="16" font-size="11" fill="#5d6578">repository checkout: the agent, or anyone with write access, can edit this</text>
+        <text x="430" y="66" text-anchor="middle" font-weight="600" font-family="IBM Plex Mono, Menlo, Consolas, monospace" font-size="13">AGENTS.md</text>
+        <text x="430" y="99" text-anchor="middle" font-size="11" fill="#5d6578">unsigned text</text>
+        <text x="430" y="113" text-anchor="middle" font-size="11" fill="#5d6578">“staging deploys are pre-authorized”</text>
+        <text x="430" y="146" text-anchor="middle" font-size="11" fill="#0f6e56" font-weight="600">signed block</text>
+        <text x="430" y="160" text-anchor="middle" font-size="11" fill="#0f6e56" font-family="IBM Plex Mono, Menlo, Consolas, monospace">BEGIN SIB … END SIB SIGNATURE</text>
+        <text x="438" y="220" font-size="11" fill="#5d6578">loaded as instructions,</text>
+        <text x="438" y="234" font-size="11" fill="#5d6578">trusted by Codex by default</text>
+
+        <text x="716" y="62" font-weight="600" font-family="IBM Plex Mono, Menlo, Consolas, monospace" font-size="12.5">~/.codex/config.toml</text>
+        <text x="716" y="78" font-size="11" fill="#5d6578">written by  sib install codex</text>
+        <text x="716" y="102" font-family="IBM Plex Mono, Menlo, Consolas, monospace" font-size="11">approvals_reviewer = "auto_review"</text>
+        <text x="716" y="120" font-family="IBM Plex Mono, Menlo, Consolas, monospace" font-size="11">[auto_review]</text>
+        <text x="716" y="136" font-family="IBM Plex Mono, Menlo, Consolas, monospace" font-size="11">experimental_policy_template = pinned Codex template</text>
+        <text x="716" y="152" font-family="IBM Plex Mono, Menlo, Consolas, monospace" font-size="11">extra_policy = SIB rules (sib path, SIB_HOME, audience)</text>
+        <text x="716" y="168" font-size="11" fill="#8a5a00">+ your own rule: a deploy is high risk</text>
+        <text x="898" y="212" font-size="11" fill="#5d6578">rendered into the reviewer's prompt</text>
+
+        <text x="430" y="274" text-anchor="middle" font-weight="600">Codex agent</text>
+        <text x="430" y="292" text-anchor="middle" font-size="11.5" fill="#5d6578">sandbox: workspace write, no network</text>
+        <text x="430" y="314" text-anchor="middle" font-family="IBM Plex Mono, Menlo, Consolas, monospace" font-size="11.5">scripts/deploy.sh staging</text>
+        <text x="430" y="332" text-anchor="middle" font-size="11" fill="#5d6578">network call blocked → escalates</text>
+        <text x="629" y="272" text-anchor="middle" font-size="11.5">approval request</text>
+        <text x="629" y="340" text-anchor="middle" font-size="11.5">allow / deny</text>
+
+        <text x="716" y="258" font-weight="600">auto_review reviewer</text>
+        <text x="716" y="276" font-size="11.5" fill="#5d6578">LLM subagent, read-only commands, no network</text>
+        <text x="716" y="300" font-size="11.5">scores  <tspan font-family="IBM Plex Mono, Menlo, Consolas, monospace">risk_level</tspan>  and  <tspan font-family="IBM Plex Mono, Menlo, Consolas, monospace">user_authorization</tspan></text>
+        <text x="716" y="318" font-size="11.5">only verified spans may raise authorization</text>
+        <text x="716" y="340" font-size="11.5">outcome = policy over both  →  <tspan font-family="IBM Plex Mono, Menlo, Consolas, monospace">allow | deny</tspan></text>
+
+        <text x="772" y="410" text-anchor="end" font-size="11" fill="#5d6578">runs, as a read-only command,</text>
+        <text x="772" y="424" text-anchor="end" font-family="IBM Plex Mono, Menlo, Consolas, monospace" font-size="10.5">sib verify --json AGENTS.md</text>
+        <text x="772" y="438" text-anchor="end" font-family="IBM Plex Mono, Menlo, Consolas, monospace" font-size="10.5">--audience acme/dev-agent</text>
+        <text x="858" y="410" font-size="11" fill="#5d6578">returns the manifest:</text>
+        <text x="858" y="424" font-family="IBM Plex Mono, Menlo, Consolas, monospace" font-size="10.5">spans[].status, signer, text</text>
+
+        <text x="716" y="472" font-weight="600">Verifier</text>
+        <text x="716" y="490" font-size="11.5" fill="#5d6578">deterministic, no model</text>
+        <text x="716" y="508" font-size="11.5">extracts every block in AGENTS.md,</text>
+        <text x="716" y="524" font-size="11.5">checks signature, expiry, audience</text>
+        <text x="929" y="486" text-anchor="middle" font-size="11" fill="#5d6578">keys</text>
+
+        <text x="1015" y="472" text-anchor="middle" font-weight="600">Registry</text>
+        <text x="1015" y="490" text-anchor="middle" font-size="11" fill="#5d6578">SIB_HOME</text>
+        <text x="1015" y="506" text-anchor="middle" font-size="11" fill="#5d6578">outside the repo</text>
+        <text x="1015" y="524" text-anchor="middle" font-size="11" fill="#8a5a00">the trust root</text>
+      </g>
+    </svg>

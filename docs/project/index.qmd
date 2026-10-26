@@ -32,6 +32,10 @@ and the plans are published as they stand in the repository; neither has been th
   change to Codex, why its reviewer can carry authority where Claude Code's classifier cannot, and
   the `extra_policy` bug that complicates the configuration.
 
+- [SIB in Codex](codex-integration.qmd): Three figures showing how the Codex integration works:
+  the runtime path through the auto-review reviewer, what differs between a forged claim and a
+  signature, and why the reviewer template is pinned.
+
 - [Attack Catalog](attacks.qmd): Every injection vector, channel probe, harness test and failed
   experimental design, with what happened and where the evidence is.
 
