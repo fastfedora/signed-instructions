@@ -53,15 +53,25 @@ def check_can_listen(port: int, origin: str) -> None:
 
 
 def open_url(url: str, browser: str | None = None) -> subprocess.Popen | None:
-    """Open the page in the default browser, or in `browser` (else
-    `SIB_BROWSER`): a name the `webbrowser` module knows, such as `safari`,
-    `chrome` or `firefox`, or a command to run with the URL appended, such
-    as `open -a Safari`. The default browser may lack passkey support, or a
-    password manager in it may capture the prompt.
+    """Open the page in the default browser, or in `browser`, else in
+    `SIB_BROWSER`. Either may be a name the `webbrowser` module knows, such as
+    `safari`, `chrome` or `firefox`. Only `browser`, which comes from
+    `--browser`, may also be a command to run with the URL appended, such as
+    `open -a Safari`.
+
+    `SIB_BROWSER` is deliberately the weaker of the two. The browser is where
+    the signer reads the text they are about to approve, so whatever opens it is
+    part of the signing path; and a command taken from the environment could be
+    anything, including something that opens no page at all while the signer
+    waits for a prompt it will supply itself. An environment variable is set by
+    anything that can write a line into a shell startup file, which an agent can
+    do; `--browser` is typed by the person at the terminal. So the variable may
+    choose among installed browsers and may not name a program.
 
     Returns the child process when a command was run, so a caller can wait on
     it, and None when the `webbrowser` module handled the URL itself.
     """
+    from_flag = browser is not None
     browser = browser or os.environ.get("SIB_BROWSER")
     if not browser:
         webbrowser.open(url)
@@ -71,6 +81,12 @@ def open_url(url: str, browser: str | None = None) -> subprocess.Popen | None:
         return None
     except webbrowser.Error:
         pass
+    if not from_flag:
+        raise BrowserFlowError(
+            f"SIB_BROWSER={browser!r} is not a browser this platform knows. The variable may name an "
+            f"installed browser, such as safari, chrome or firefox, but not a command to run: the "
+            f"browser shows you what you are about to sign, so what opens it is part of signing. "
+            f"Pass --browser {browser!r} yourself to run it as a command.")
     try:
         return subprocess.Popen(shlex.split(browser) + [url], stdin=subprocess.DEVNULL,
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

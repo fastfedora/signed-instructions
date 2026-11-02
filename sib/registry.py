@@ -6,8 +6,10 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
+import sys
 from pathlib import Path
 
+from .header import MODES
 from .keys_dev import sib_home
 from .keys_webauthn import ALG as WEBAUTHN_ALG, DEFAULT_ALLOWED_AAGUIDS, is_model_aaguid
 
@@ -76,17 +78,41 @@ class Registry:
 
 
 def default_mode(registry: Registry | None = None) -> str:
-    """The verifier's mode when the harness does not set one (NF-4): `SIB_MODE`
-    when set; otherwise `enforced` once any WebAuthn key is enrolled and
-    `dev` before that."""
-    env = os.environ.get("SIB_MODE")
-    if env:
-        return env
+    """The verifier's mode when the harness does not set one (NF-4): `enforced`
+    once any WebAuthn key is enrolled, `dev` before that.
+
+    `SIB_MODE` may raise that bar and never lower it. Enforced mode is the only
+    thing between a software key and a block the reviewer scores as human
+    authorization, and a software key is cheap: anything able to run `sib` can
+    enroll one for any signer id, with no authenticator and nobody present. The
+    environment is not a safe place to keep that decision, because an agent that
+    can append one line to a shell startup file sets it for every later `sib` on
+    the machine, the verifier included. So a value asking for less than the
+    registry implies is reported and ignored, as is a value that is not a mode
+    at all -- which would otherwise read as dev everywhere the comparison is
+    against `enforced`.
+
+    `--dev` still works. A flag is typed by whoever is at the terminal; an
+    environment variable is not.
+    """
     try:
         reg = registry if registry is not None else Registry()
-        return "enforced" if reg.has_webauthn_key() else "dev"
+        floor = "enforced" if reg.has_webauthn_key() else "dev"
     except (OSError, ValueError, KeyError):
-        return "dev"
+        floor = "dev"
+    env = os.environ.get("SIB_MODE")
+    if not env or env == floor:
+        return floor
+    if env not in MODES:
+        print(f"warning: ignoring SIB_MODE={env!r}, which is not one of {', '.join(MODES)}; "
+              f"verifying in {floor} mode", file=sys.stderr)
+        return floor
+    if env == "dev" and floor == "enforced":
+        print("warning: ignoring SIB_MODE=dev: a passkey is enrolled, so this registry verifies in "
+              "enforced mode. The environment may tighten the mode and not loosen it. Pass --dev to "
+              "one command if that is what you meant.", file=sys.stderr)
+        return "enforced"
+    return env
 
 
 def resolve_audience(explicit: str | None = None) -> tuple[str | None, str]:

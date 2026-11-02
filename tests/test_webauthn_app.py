@@ -259,3 +259,30 @@ def test_a_port_already_taken_says_that_instead():
             check_can_listen(port, f"http://localhost:{port}")
     finally:
         held.close()
+
+
+def test_sib_browser_may_name_a_browser_but_not_a_command(monkeypatch):
+    """An environment variable is set by anything that can write a shell startup
+    file. The browser is where the signer reads what they are about to approve,
+    so the variable may choose among installed browsers and may not name a
+    program to run."""
+    from sib.webauthn_app import open_url, BrowserFlowError
+    monkeypatch.setenv("SIB_BROWSER", "/tmp/not-a-browser.sh --steal")
+    with pytest.raises(BrowserFlowError) as e:
+        open_url("http://localhost:7391/sign/tok")
+    assert "not a browser this platform knows" in str(e.value) and "part of signing" in str(e.value)
+
+    # --browser is typed by the person at the terminal, so it still runs a command
+    ran = []
+    monkeypatch.setattr("subprocess.Popen", lambda argv, **kw: ran.append(argv))
+    open_url("http://localhost:7391/sign/tok", "/bin/echo opening")
+    assert ran == [["/bin/echo", "opening", "http://localhost:7391/sign/tok"]]
+
+
+def test_a_browser_name_in_the_environment_still_works(monkeypatch):
+    opened = []
+    monkeypatch.setenv("SIB_BROWSER", "safari")
+    monkeypatch.setattr("webbrowser.get", lambda name: type("B", (), {"open": lambda s, u: opened.append((name, u))})())
+    from sib.webauthn_app import open_url
+    open_url("http://localhost:7391/sign/tok")
+    assert opened == [("safari", "http://localhost:7391/sign/tok")]

@@ -172,7 +172,9 @@ def gather_candidates(event: dict) -> list[tuple[Block, dict]]:
 
 def assemble_manifest(event: dict) -> dict:
     """Verifier error → manifest with zero verified spans and an error field (fail closed on authority).
-    The mode is SIB_MODE when set, else enforced once a WebAuthn key is enrolled (NF-4)."""
+    The mode is enforced once a WebAuthn key is enrolled (NF-4); `SIB_MODE` can
+    tighten it and not loosen it, so the fallback below is only a label on a
+    manifest that already carries no verified span."""
     mode = os.environ.get("SIB_MODE") or "dev"
     audience = harness_audience()
     session_id, tool_use_id = event.get("session_id"), event.get("tool_use_id")

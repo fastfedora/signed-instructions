@@ -367,7 +367,11 @@ usage error, such as signing with a key that is not enrolled for the signer.
 : Directory for dev keys and `registry.json` (default: `~/.sib`).
 
 `SIB_MODE`
-: `dev` or `enforced`; overrides the default described under `verify`.
+: `dev` or `enforced`. It may tighten the default described under `verify` and not loosen it: with
+  a passkey enrolled, `SIB_MODE=dev` is reported and ignored, as is any value that is not a mode.
+  Use `--dev` for one command. The reason is under
+  [What the environment may do](../deep-dives/design-decisions.qmd#what-the-environment-may-do).
 
 `SIB_BROWSER`, `SIB_WEBAUTHN_PORT`, `SIB_REQUIRE_ATTESTATION`, `SIB_ATTESTATION_ROOTS`
 : Passkey enrollment and signing; see [Biometric Signing](../components/signing.qmd#environment).
+  `SIB_BROWSER` may name an installed browser but not a command to run.
