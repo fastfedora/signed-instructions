@@ -261,6 +261,33 @@ def test_a_port_already_taken_says_that_instead():
         held.close()
 
 
+def test_the_sign_page_shows_the_confirmation_code(sib_home):
+    """The code is the only thing tying the page to the terminal that started
+    the ceremony: `http://localhost` is an origin any local process can take,
+    and the authenticator's own prompt names the relying party, never the text."""
+    auth = FakeAuthenticator()
+    reg = Registry()
+    enroll_fake(reg, auth, ALICE, PKID)
+    state, c = _client()
+    text = "You may deploy to staging with scripts/deploy.sh staging."
+    token, h = _sign_request(state, auth, reg, text)
+    code = keys_webauthn.code_for_challenge(sign_challenge(h, text))
+    page = c.get(f"/sign/{token}").text
+    assert len(code) == 6 and code.isdigit()
+    assert code in page and "Confirmation code" in page
+    assert "not the one you started" in page          # and says what a mismatch means
+
+
+def test_the_code_follows_the_text_that_is_signed(sib_home):
+    auth = FakeAuthenticator()
+    reg = Registry()
+    enroll_fake(reg, auth, ALICE, PKID)
+    h = _header()
+    a = keys_webauthn.code_for_challenge(sign_challenge(h, "You may deploy to staging."))
+    b = keys_webauthn.code_for_challenge(sign_challenge(h, "You may deploy to production."))
+    assert a != b
+
+
 def test_sib_browser_may_name_a_browser_but_not_a_command(monkeypatch):
     """An environment variable is set by anything that can write a shell startup
     file. The browser is where the signer reads what they are about to approve,

@@ -46,6 +46,34 @@ def ask_text(question: str, default: str | None = None) -> str | None:
 
 # ---- the audience ----
 
+def confirm_on_terminal(question: str, default: bool = False) -> bool | None:
+    """Ask on the controlling terminal, not on stdin, and return None when there
+    is no terminal to ask at.
+
+    The thing being confirmed may itself have arrived on stdin, which leaves
+    nothing there to read an answer from; and where the question is whether a
+    person approves, the answer has to come from the person at the keyboard
+    rather than from whatever filled the pipe. Writing the prompt to the
+    terminal too means a redirected stderr cannot hide it.
+    """
+    try:
+        tty = open("/dev/tty", "r+")
+    except OSError:
+        return None
+    try:
+        tty.write(question + (" [Y/n] " if default else " [y/N] "))
+        tty.flush()
+        line = tty.readline()
+    except OSError:
+        return None
+    finally:
+        tty.close()
+    if not line:
+        return None
+    answer = line.strip().lower()
+    return default if not answer else answer in ("y", "yes")
+
+
 def suggest_audience() -> str:
     """A name scoped to this machine and account.
 

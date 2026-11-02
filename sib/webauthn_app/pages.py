@@ -21,6 +21,9 @@ _STYLE = """
   #status { margin-top: 1rem; min-height: 1.5rem; }
   .ok { color: #137333; } .err { color: #b3261e; } .warn { color: #8a5a00; }
   .note { color: #555; font-size: 0.9rem; }
+  .code { font-size: 1.1rem; margin: 1rem 0 0.25rem; }
+  .code strong { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+                 letter-spacing: 0.2em; font-size: 1.4rem; }
 """
 
 _SCRIPT = """
@@ -99,6 +102,9 @@ def sign_page(token: str, payload: dict) -> str:
 <h1>Sign this instruction</h1>
 <pre>{html.escape(payload["ctext"])}</pre>
 <dl>{dl}</dl>
+<p class="code">Confirmation code <strong>{html.escape(payload["code"])}</strong></p>
+<p class="note">Your terminal printed this code when you ran <code>sib sign</code>. If it does not
+match, close this page: the ceremony you are being asked to approve is not the one you started.</p>
 <button id="go">Sign with user verification</button>"""
     script = f"""
   const TOKEN = {token!r};

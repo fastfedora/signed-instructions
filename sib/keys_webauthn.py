@@ -84,6 +84,27 @@ def challenge(signing_header_b64: str, canonical_text: str) -> bytes:
     return hashlib.sha256(signing_input(signing_header_b64, canonical_text)).digest()
 
 
+def code_for_challenge(ch: bytes) -> str:
+    """Six digits over the challenge, for the signer to compare between their
+    terminal and the page they are about to approve.
+
+    WebAuthn tells the authenticator nothing about what the challenge means, and
+    the prompt it shows names the relying party and never the instruction, so a
+    passkey ceremony on `http://localhost` cannot by itself say which text a
+    human approved. Any local process can serve that origin and ask for an
+    assertion over bytes of its choosing, at a moment the signer is expecting to
+    be asked. The code closes that gap with the one channel an attacker does not
+    hold: the terminal the signer typed `sib sign` into. A page showing a
+    different code, or no code, is not the ceremony they started.
+
+    Six digits are short enough to be compared at a glance, which is the only
+    property that matters; the challenge they come from is what the signature
+    actually covers.
+    """
+    n = int.from_bytes(hashlib.sha256(b"sib-confirmation\x00" + ch).digest()[:4], "big")
+    return f"{n % 1_000_000:06d}"
+
+
 def is_model_aaguid(aaguid: str) -> bool:
     """True for a well-formed AAGUID that names a model.
 

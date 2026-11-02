@@ -27,6 +27,28 @@ command before the page opened:
 challenge = SHA-256( BASE64URL(signing header) || "." || canonical instruction )
 ```
 
+### Confirmation code
+
+The terminal also prints a six-digit code, derived from that same challenge, and the sign page
+shows it. They must match.
+
+The code exists because the ceremony cannot prove its own provenance. The page is served from
+`http://localhost:7391`, an origin any process on the machine can take, and the key's enrolled
+origin is that string; and WebAuthn passes the challenge to the authenticator as opaque bytes, so
+the prompt the signer sees names the relying party and never the instruction. Nothing in the
+ceremony therefore distinguishes a page SIB served from a page something else served, which means a
+local process can ask for an assertion over text of its own choosing at a moment the signer is
+expecting to be asked — and the resulting block verifies, because it is the signer's real passkey
+and their real biometric over a well-formed header.
+
+The one channel such a process does not hold is the terminal the signer typed `sib sign` into. The
+code carries that channel into the browser: a page showing a different code, or no code, is not the
+ceremony that terminal started. Comparing it is the signer's job, as with an SSH host key.
+Standard WebAuthn has no transaction confirmation — the `txAuthSimple` extension was dropped and
+nothing replaced it for this case — so there is no cryptographic substitute. The full analysis is
+under [Signing Rests on the Terminal, Not the
+Ceremony](../deep-dives/design-decisions.qmd#signing-rests-on-the-terminal-not-the-ceremony).
+
 The signing header is the block's header without the three assertion fields described below,
 because they are not known until the authenticator has signed. The browser prompts for Touch ID
 (or the platform's equivalent), the authenticator signs, and the page posts the assertion back to
