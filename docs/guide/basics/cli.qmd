@@ -57,7 +57,11 @@ Create a dev-mode Ed25519 key under `$SIB_HOME/dev-keys/` and optionally enroll 
 : Key identifier, by convention `signer#label`. Overrides the derived name.
 
 `--enroll`
-: Also add the public key to the registry. Requires `--signer`.
+: Also add the public key to the registry. Requires `--signer`. Refused when that signer already
+  holds a passkey: a software key signs from a file with nobody present, and anything that can run
+  `sib` can create one, so a second weaker key under a name that already has a passkey can only
+  weaken what a signature from that person means. Without `--enroll` the key file is still
+  written, because a key nobody is enrolled for confers nothing.
 
 `--audience ID`
 : Record this as the registry's `default_audience`, so `sign`, `verify` and `install` need no

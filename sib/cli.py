@@ -77,6 +77,26 @@ def resolve_destination(a) -> tuple[Path | None, bool]:
     return (found, True) if found else (None, False)
 
 
+def refuse_a_software_key_beside_a_passkey(reg: Registry, signer: str) -> None:
+    """A software key enrolled for someone who already holds a passkey can only
+    weaken what a signature from that person means.
+
+    It signs from a file, with nobody present, and anything able to run `sib`
+    can create one for any signer id it likes. Enforced mode is what keeps such
+    a key from counting as authorization, which leaves a real guarantee resting
+    on a single mode decision; refusing to enrol the key at all is the cheaper
+    half of that defence, and costs nothing, because a signer who has a passkey
+    has no need of a second weaker key under the same name.
+    """
+    held = [k["kid"] for k in reg.signers.get(signer, [])
+            if k.get("alg") == keys_webauthn.ALG and not k.get("revoked")]
+    if held:
+        raise SystemExit(f"refusing to enroll a software key for {signer}: they already hold a passkey "
+                         f"({', '.join(held)}), and a software key signs with no human present. Create "
+                         f"the key without --enroll if you need the file, or enroll it for a signer id "
+                         f"that is not {signer}.")
+
+
 def default_kid(signer: str) -> str:
     """Convention: signer#dev-<year>-<month>."""
     return f"{signer}#dev-{dt.datetime.now(dt.timezone.utc).strftime('%Y-%m')}"
@@ -137,6 +157,7 @@ def cmd_keygen(a):
     if a.enroll or a.audience:
         reg = Registry()
         if a.enroll:
+            refuse_a_software_key_beside_a_passkey(reg, a.signer)
             reg.add_key(a.signer, kid, "EdDSA", pub, mode="dev")
         if a.audience:
             reg.default_audience = a.audience
@@ -152,6 +173,8 @@ def cmd_enroll(a):
     if a.public_key:
         if not a.kid:
             raise SystemExit("--kid is required with --public-key")
+        if a.dev or a.alg != keys_webauthn.ALG:
+            refuse_a_software_key_beside_a_passkey(reg, a.signer)
         reg.add_key(a.signer, a.kid, a.alg, a.public_key, mode="dev" if a.dev else "enforced")
         reg.save()
         print(f"enrolled {a.kid} for {a.signer} in {reg.path}")

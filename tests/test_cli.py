@@ -628,3 +628,40 @@ def test_find_instructions_file_is_told_where_to_start(tmp_path):
     assert find_instructions_file(tmp_path) is None
     (tmp_path / "AGENTS.md").write_text("x\n")
     assert find_instructions_file(tmp_path) == tmp_path / "AGENTS.md"
+
+
+# ---- what a signature is allowed to rest on ----
+
+def test_a_software_key_is_refused_beside_a_passkey(sib_home, registry, monkeypatch):
+    """Anything that can run `sib` can mint a software key for any signer id, so
+    the only thing keeping one from reading as this person's signature is
+    enforced mode. Not enrolling it is the cheaper half of that defence."""
+    from tests.fake_authenticator import FakeAuthenticator, enroll_fake
+    reg = Registry()
+    enroll_fake(reg, FakeAuthenticator(), "alice@example.com", "alice@example.com#passkey-1")
+    reg.save()
+    before = len(Registry().signers["alice@example.com"])
+    rc, so, se = run(["keygen", "--signer", "alice@example.com", "--enroll"])
+    assert rc != 0 and "refusing to enroll a software key" in se
+    assert "alice@example.com#passkey-1" in se                  # names what they already hold
+    assert len(Registry().signers["alice@example.com"]) == before   # and nothing was added
+
+    # the same refusal on the raw-public-key path, which is the same act
+    rc, so, se = run(["enroll", "--signer", "alice@example.com", "--kid", "alice@example.com#x",
+                      "--public-key", "AAAA", "--dev"])
+    assert rc != 0 and "refusing to enroll a software key" in se
+
+    # a signer with no passkey is unaffected
+    rc, so, se = run(["keygen", "--signer", "bob@example.com", "--enroll"])
+    assert rc == 0 and Registry().signers["bob@example.com"]
+
+
+def test_keygen_without_enroll_still_writes_the_key(sib_home, registry):
+    """The refusal is about the registry entry, not the file: a key nobody is
+    enrolled for confers nothing, so there is no reason to withhold it."""
+    from tests.fake_authenticator import FakeAuthenticator, enroll_fake
+    reg = Registry()
+    enroll_fake(reg, FakeAuthenticator(), "alice@example.com", "alice@example.com#passkey-1")
+    reg.save()
+    rc, so, se = run(["keygen", "--signer", "alice@example.com"])
+    assert rc == 0 and "dev key created" in so
