@@ -739,6 +739,31 @@ def test_the_destination_shown_to_the_signer_is_the_one_used(sib_home, monkeypat
     assert rc == 0 and seen["action"] == f"writing {out}" and f"  writing {out}" in se
 
 
+def test_a_decline_in_the_browser_leaves_the_destination_alone(sib_home, monkeypatch, tmp_path):
+    """Cancelling on the sign page, or closing it, is the signer saying no -- and
+    saying no has to leave the file exactly as it was. The destination is
+    resolved before the ceremony, so this is the one place a resolved path could
+    still be written to after the signer declined."""
+    from tests.fake_authenticator import FakeAuthenticator, enroll_fake
+    import sib.webauthn_app
+    from sib.webauthn_app import BrowserFlowError
+    auth = FakeAuthenticator()
+    reg = Registry()
+    enroll_fake(reg, auth, "alice@example.com", "alice@example.com#passkey-1")
+    reg.save()
+
+    def declined(*a, **k):
+        raise BrowserFlowError("the browser reported: cancelled on the sign page")
+    monkeypatch.setattr(sib.webauthn_app, "sign_in_browser", declined)
+    agents = tmp_path / "AGENTS.md"
+    agents.write_text("# Project\n")
+    monkeypatch.chdir(tmp_path)
+    rc, so, se = run(["sign", "--signer", "alice@example.com", "--audience", "acme/dev-agent",
+                      "You may deploy to staging."])
+    assert rc != 0 and "cancelled on the sign page" in se
+    assert agents.read_text() == "# Project\n" and so == ""
+
+
 def test_the_code_the_terminal_prints_is_the_code_the_page_shows(sib_home, monkeypatch):
     """The whole value of the code is that the two sides agree, so this
     recomputes the page's side from the block the command produced. A silent

@@ -295,6 +295,62 @@ def test_the_sign_page_shows_what_will_be_done_with_the_block(sib_home):
     assert "depends on the file an agent reads it from" in page
 
 
+def test_the_sign_page_offers_an_explicit_no(sib_home):
+    """Declining has to be an action on the page, not an absence of one. Without
+    a Cancel button the only way to say no was to start the ceremony and dismiss
+    the authenticator, which is a strange thing to ask of someone who has
+    already decided."""
+    auth = FakeAuthenticator()
+    reg = Registry()
+    enroll_fake(reg, auth, ALICE, PKID)
+    state, c = _client()
+    token, _ = _sign_request(state, auth, reg)
+    page = c.get(f"/sign/{token}").text
+    assert '<button id="no"' in page and ">Cancel<" in page
+    assert "cancelled on the sign page" in page
+    # and the button's endpoint ends the command's wait with that reason
+    r = c.post(f"/api/sign/{token}/abort", json={"error": "cancelled on the sign page"})
+    assert r.status_code == 200
+    pend = state.pending[token]
+    assert pend.done.is_set() and pend.result is None
+    assert "cancelled on the sign page" in pend.error
+
+
+def test_closing_the_sign_page_declines_instead_of_hanging(sib_home):
+    """A closed tab used to mean the command sat through its whole timeout. The
+    page sends a beacon on pagehide, which the same abort endpoint answers."""
+    auth = FakeAuthenticator()
+    reg = Registry()
+    enroll_fake(reg, auth, ALICE, PKID)
+    state, c = _client()
+    token, _ = _sign_request(state, auth, reg)
+    page = c.get(f"/sign/{token}").text
+    assert "declineOnClose('sign', TOKEN)" in page
+    assert "addEventListener('pagehide'" in page and "navigator.sendBeacon" in page
+    assert "if (settled) return;" in page          # not after the command already has an answer
+    # the beacon is a JSON blob, which is the same request the endpoint already takes
+    r = c.post(f"/api/sign/{token}/abort", content=b'{"error": "the page was closed without signing"}',
+               headers={"content-type": "application/json"})
+    assert r.status_code == 200
+    assert "closed without signing" in state.pending[token].error
+
+
+def test_a_settled_request_is_not_declined_afterwards(sib_home):
+    """pagehide fires on a tab closed after a successful signature too. The page
+    guards on `settled`, and the endpoint refuses a spent token in any case, so
+    a verified block cannot be undone by closing the tab it was signed in."""
+    auth = FakeAuthenticator()
+    reg = Registry()
+    enroll_fake(reg, auth, ALICE, PKID)
+    state, c = _client()
+    token, h = _sign_request(state, auth, reg)
+    challenge = keys_webauthn.b64u_decode(c.post(f"/api/sign/{token}/options").json()["challenge"])
+    assert c.post(f"/api/sign/{token}/finish", json=auth.get(challenge)).json()["ok"] is True
+    result = state.pending[token].result
+    assert c.post(f"/api/sign/{token}/abort", json={"error": "closed"}).status_code == 404
+    assert state.pending[token].result is result and state.pending[token].error is None
+
+
 def test_an_action_the_signer_should_not_trust_cannot_inject_markup(sib_home):
     auth = FakeAuthenticator()
     reg = Registry()
