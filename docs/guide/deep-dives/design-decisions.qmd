@@ -203,3 +203,105 @@ in the header, every signing and verification prints a warning that the signatur
 of a file rather than the presence of a person, and in enforced mode a dev block reports
 `dev_key_in_enforced_mode` and confers nothing. The alternative, an unlabelled testing path that
 happens to work in production, is how a prototype's shortcuts become a deployment's holes.
+
+
+## What the Environment May Do
+
+`SIB_MODE` may tighten the verifier's mode and may not loosen it. With a passkey enrolled,
+`SIB_MODE=dev` is reported and ignored, and so is any value that is not one of the two modes.
+Dev mode for one command is `--dev`.
+
+The rule exists because the environment is not a place to keep a security decision. Two
+observations make that concrete. The first is that a software key is almost free: `sib keygen
+--signer <anyone> --enroll` writes a key and a registry entry with no authenticator, no ceremony
+and nobody present, and nothing about the command requires the signer id to be the person running
+it. The second is that `mode == "enforced"` is the only comparison standing between such a key and
+a span the reviewer scores as human authorization. So the entire guarantee rested on one string
+read from `os.environ`.
+
+That is a short chain for an agent to break. An agent cannot change the environment of a process
+already running, but it does not need to: a line appended to `~/.zshenv` is read by every later
+`zsh`, non-interactive ones included, which covers both the user's own `sib sign` and the
+reviewer's `sib verify`. Two ordinary commands — enroll a software key, append one line — and
+every block the agent writes afterwards verifies as the user. A flag is different in kind, because
+a flag is typed by whoever is at the terminal.
+
+The same reasoning applies twice more. `SIB_BROWSER` may name an installed browser and not a
+command to run, because it previously accepted a command that the URL was appended to, which made
+it arbitrary execution inside the user's own shell at the moment they ran `sib sign` — the one
+shell that may be outside an agent's sandbox — and because the browser is where the signer reads
+what they are about to approve. And `sib keygen --enroll` now refuses a software key for a signer
+who already holds a passkey, which removes the first step of the chain above rather than relying on
+the mode check to make it harmless.
+
+What this does not fix is a registry an attacker can write to. `registry.json` is the trust root:
+whoever can edit it can add a key, add an AAGUID to `allowed_aaguids`, and verify their own blocks.
+No amount of care about environment variables changes that, and the installer's own warning about a
+registry inside the working directory is the same point. Likewise `PATH`: the reviewer invokes
+`sib` by absolute path, which is deliberate, but a user typing `sib sign` resolves it through
+`PATH` like any other command.
+
+The reviewer's command is where this is cheapest to enforce, and it is worth stating what it
+already pins. `sib install codex` writes `SIB_HOME={home} {sib} verify --json AGENTS.md --audience
+{audience}`: the home is an assignment on the command rather than an inherited variable, the
+audience is a flag, which beats `SIB_AUDIENCE` by `resolve_audience`'s precedence, and `{sib}` is
+an absolute path. **Open, to discuss with the team:** the mode is not pinned there. Adding
+`--enforced` to that command would make the verifier's mode independent of `default_mode` and of
+the environment entirely, at the cost of a configuration that no longer tracks the registry — an
+install whose passkey is later revoked would verify nothing rather than falling back to dev mode.
+The argument for pinning it is that the reviewer's command is written once, by a human running an
+installer, which is exactly the provenance a security decision should have. The policy text should
+probably also say that a span's `mode` matters, since it currently tells the reviewer to trust
+`status: "verified"` and never mentions the mode the manifest reports alongside it.
+
+
+## Signing Rests on the Terminal, Not the Ceremony
+
+A passkey ceremony proves that a particular credential was exercised with user verification. It
+does not prove which text the person was looking at, and in SIB's arrangement it does not prove
+that the page they approved was SIB's.
+
+Three facts combine. The sign page is served from `http://localhost:7391`, and that string is what
+the registry records as the key's enrolled origin, so any process on the machine can serve a page
+with an origin the verifier accepts. The relying party id is `localhost`, so the `rpIdHash` in the
+assertion matches for any such page. And WebAuthn hands the challenge to the authenticator as
+opaque bytes: the prompt the signer sees names the relying party and shows nothing of the
+instruction.
+
+So a local process can compose its own header and instruction, compute the challenge exactly as
+`sib sign` does, serve a page on 7391 asking for an assertion over it, and arrange for the signer
+to be expecting a Touch ID prompt. The signer touches the sensor. The resulting block carries their
+real credential, their real biometric, a correct origin, an allowlisted AAGUID and `uv` performed —
+and it verifies. No key is compromised and no software key is involved; enforced mode is satisfied.
+This is the one finding in this area that enforced mode does not address, because nothing about it
+is a downgrade.
+
+There is no cryptographic fix available. Binding a displayed string into an assertion is what the
+`txAuthSimple` extension was for; it was dropped from WebAuthn and nothing general replaced it, so
+a platform passkey cannot attest to what its owner read.
+
+What remains is to use a channel the attacker does not hold. The signer typed `sib sign` into a
+terminal, and that terminal knows the challenge. So it prints a six-digit code derived from the
+challenge, and the page shows the same code: a page with a different code, or none, is not the
+ceremony that terminal started. The comparison is the signer's to make, which puts this in the same
+category as an SSH host key fingerprint — a real defence that depends on someone looking.
+
+Two consequences worth keeping in view. It is why `SIB_BROWSER` may no longer name a command: what
+opens the page decides which page is read, and a variable an agent can set should not make that
+choice. And it is an argument against the agent ever invoking `sib sign` on the user's behalf, over
+and above the sandbox making it impossible — the value of the confirmation lies entirely in a
+person reading two things and comparing them.
+
+**Open, to discuss with the team.** Options not taken, in rough order of appeal:
+
+- **A per-run origin.** Bind the key to a path or a port minted per ceremony so a squatting process
+  cannot match the enrolled origin. A port is weak, since the attacker can read `registry.json` and
+  pre-bind; the origin is `scheme://host:port` so a path does not enter it at all.
+- **Require the code to be typed back**, rather than compared. It turns a glance into an action and
+  makes a mismatch impossible to skip past, at the cost of a keystroke per signature.
+- **A platform-specific confirmation surface.** macOS can present a system dialog with text; it is
+  not WebAuthn, and it is per-platform, which the prototype has so far avoided.
+- **Accept it as a documented limit**, on the grounds that an attacker already running code on the
+  machine has other routes to the same outcome. This is the status quo plus the code, and the
+  reason it is not simply fine is that signing is meant to be the one thing a compromised agent
+  cannot do.
