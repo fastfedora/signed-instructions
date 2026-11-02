@@ -73,10 +73,167 @@ What it writes:
 - Warnings when the registry sits inside the working directory, when no key is enrolled yet, and
   that SIB scores authorization but not risk, so a deploy rule is still yours to write.
 
-It places nothing in `$CODEX_HOME/skills/`. Signing is a command you run — `! sib sign "..."` from
-inside Codex, or the same in your own terminal — and it was never something an agent could do on
-your behalf: the ceremony needs your authenticator, and Codex's sandbox denies the loopback
-listener it runs on.
+It places nothing in `$CODEX_HOME/skills/`. Signing is a command you run, never something an agent
+can do on your behalf: the ceremony needs your authenticator. See [Usage](#usage).
+
+
+## Setup
+
+The installer asks about a signing key as its last question, so a fresh install is usually done
+already. These are the same steps on their own, for an install where you declined, or where you
+are adding a second signer.
+
+Until a key is enrolled every block verifies as `unknown_signer`. That is the safe direction — the
+reviewer treats the file as ordinary untrusted text, exactly as it would without SIB — but it is
+also an inert one, so nothing is gained until this is done.
+
+### A passkey
+
+```bash
+sib enroll --signer alice@example.com
+```
+
+Opens the enroll page on `http://localhost:7391`, asks your authenticator to create a credential
+with user verification required, and records the public key. The private key never leaves the
+authenticator. This is what enforced mode means by a signature: a person was present and the
+platform verified them.
+
+The command prints the authenticator's AAGUID and whether it is on the biometric-capable
+allowlist. An authenticator that is not on it enrolls, but blocks it signs fail with
+`authenticator_not_allowed` until you add it — `sib allow-authenticator` does that. The full
+flags are under [`enroll`](../basics/cli.qmd#enroll), and the ceremony is described in
+[Biometric Signing](../components/signing.qmd#enrollment).
+
+### A dev key, for trying the mechanism out
+
+```bash
+sib keygen --signer alice@example.com --enroll
+```
+
+Writes an Ed25519 key file under `$SIB_HOME/dev-keys/` and registers it. It needs no hardware and
+no browser, which makes it useful for seeing the end-to-end path work, and it proves only
+possession of a file — anything that can run `sib` can make one. Every command that uses it says
+so:
+
+```text
+SIB DEV MODE: currently using software-only keys. Signatures only prove possession of the key
+file, not a verified human.
+```
+
+Once any passkey exists in the registry, dev-mode blocks confer nothing: the verifier reports
+`dev_key_in_enforced_mode`. For the same reason `--enroll` is refused for a signer who already
+holds a passkey.
+
+### The authorization context
+
+```bash
+sib audience acme/dev-agent
+```
+
+`sib install codex` already asked for this and recorded it, so you only need the command to change
+it. It is the identifier a block's `aud` field is matched against, and it is what keeps a block
+signed for your laptop from authorizing anything in someone else's checkout. `sign` and `verify`
+both read the recorded default, so they agree with the reviewer without being told.
+
+
+## Usage
+
+### From inside Codex
+
+`!` is Codex's shell escape: the line runs in your shell, not the agent's, so this is you signing
+and not the agent asking to.
+
+```bash
+!sib sign "You may deploy the current main branch to staging with scripts/deploy.sh staging whenever the test suite passes."
+```
+
+With nothing else given, the command decides four things for you: the signer is this machine's
+`git config user.email`, the key is the one enrolled for that signer, the block never expires, and
+it is appended to the nearest `AGENTS.md` or `CLAUDE.md` at or above the working directory, with
+the search stopping at the repository root. It prints every one of those before it does anything:
+
+```text
+signing as alice@example.com (git config user.email)
+About to sign (canonical form):
+  You may deploy the current main branch to staging with scripts/deploy.sh staging whenever the test suite passes.
+  signer=alice@example.com kid=alice@example.com#passkey-6f78 expires=never, valid until removed canon=text/1 mode=enforced
+  audience=acme/dev-agent (from default_audience in ~/.sib/registry.json)
+  appending to ~/work/acme-api/AGENTS.md
+  confirmation code 074438, which the sign page must show
+Opening http://localhost:7391/sign/HhQk…
+```
+
+The browser is where you approve. The page shows the same terms — the text, the signer, the key,
+the expiry, the audience, where the block will go — and the confirmation code, which must match
+the one above. Touch the authenticator to sign, or press Cancel; nothing is written unless an
+assertion comes back verified. Then tell Codex to re-read `AGENTS.md`, and the reviewer will find
+a verified span the next time it is asked to approve something.
+
+::: {.callout-note}
+The ceremony needs to bind `http://localhost:7391`, which agent sandboxes normally forbid. If your
+harness applies its sandbox to the shell escape too, the command says so and tells you to run it
+in your own terminal instead, rather than failing obscurely. That is the next section.
+:::
+
+### From your own terminal
+
+The same command, and the one to prefer when you want no doubt about what started the ceremony:
+
+```bash
+cd ~/work/acme-api
+sib sign "You may deploy the current main branch to staging with scripts/deploy.sh staging whenever the test suite passes."
+```
+
+`cd` into the repository first, because the destination is found by walking up from the working
+directory. The confirmation code exists precisely to tie the page you approve on to the terminal
+you typed in, so a terminal you control is where it is worth the most —
+[Confirmation code](../components/signing.qmd#confirmation-code) explains what it defends against.
+
+### Signing with options
+
+Every default above can be given explicitly. A block that expires, written to a named file:
+
+```bash
+sib sign --expires 8h --audience acme/dev-agent --append docs/AGENTS.md   "You may deploy the current main branch to staging."
+```
+
+```text
+signing as alice@example.com (git config user.email)
+About to sign (canonical form):
+  You may deploy the current main branch to staging.
+  signer=alice@example.com kid=alice@example.com#passkey-6f78 expires=2026-11-03T06:36:50Z canon=text/1 mode=enforced
+  audience=acme/dev-agent (from --audience)
+  appending to ~/work/acme-api/docs/AGENTS.md
+```
+
+The ones worth knowing:
+
+`--expires 8h`
+: A validity window from now, as `30m`, `2h` or `1d`. The default is no expiry, which is valid
+  until the block is removed from the file — reasonable for a standing rule, less so for one
+  afternoon's permission.
+
+`--audience acme/dev-agent`
+: Override the recorded default. Required for a passkey-signed block if no default is recorded:
+  enforced mode refuses a block with no audience.
+
+`--signer`, `--kid`
+: Either identifies the other through the registry. Needed when one person has several enrolled
+  keys, or when signing as someone other than the git identity.
+
+`--out -`
+: Print the block to standard output instead of appending it, for piping or pasting. `--out FILE`
+  writes a file outright; `--append FILE` appends to one you name rather than searching.
+
+`--file notes.md`, or piping on stdin
+: Take the instruction from a file instead of the command line, for anything long enough that
+  shell quoting becomes the problem. `sib sign` with no argument reads stdin.
+
+`--dev`
+: Sign with a dev key even when a passkey is enrolled. For demonstrating the path without an
+  authenticator; the resulting block confers nothing in enforced mode.
+
+The full list is under [`sign`](../basics/cli.qmd#sign).
 
 
 ## Why the Template Is Pinned
