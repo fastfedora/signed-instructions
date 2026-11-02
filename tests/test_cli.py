@@ -721,3 +721,44 @@ def test_the_code_the_terminal_prints_is_the_code_the_page_shows(sib_home, monke
     h = Header.decode(block.compact.split("..")[0])
     challenge = keys_webauthn.challenge(h.signing_header().encode(), canonicalize(h.canon, block.text))
     assert keys_webauthn.code_for_challenge(challenge) == printed
+
+
+def test_the_confirmation_is_asked_on_a_terminal(tmp_path):
+    """The real function against a real terminal device.
+
+    Everything else here replaces `confirm_on_terminal`, which is how a first
+    version that could never succeed went unnoticed: it opened /dev/tty as
+    `r+`, a terminal is not seekable, and the `io.UnsupportedOperation` that
+    raises is an OSError -- so it read as "no terminal" and refused every
+    signature.
+    """
+    import os
+    import pty
+    from sib.first_run import confirm_on_terminal
+    master, slave = pty.openpty()
+    dev = os.ttyname(slave)
+    try:
+        os.write(master, b"y\n")
+        assert confirm_on_terminal("Sign this instruction?", device=dev) is True
+        assert b"Sign this instruction? [y/N]" in os.read(master, 400)
+
+        os.write(master, b"\n")                     # bare Enter takes the default
+        assert confirm_on_terminal("Sign?", device=dev) is False
+        os.read(master, 400)
+        os.write(master, b"\n")
+        assert confirm_on_terminal("Sign?", default=True, device=dev) is True
+        os.read(master, 400)
+
+        os.write(master, b"yes\n")
+        assert confirm_on_terminal("Sign?", device=dev) is True
+        os.read(master, 400)
+        os.write(master, b"nope\n")                 # anything else is a no
+        assert confirm_on_terminal("Sign?", device=dev) is False
+    finally:
+        os.close(master)
+        os.close(slave)
+
+
+def test_a_missing_terminal_is_not_an_approval(tmp_path):
+    from sib.first_run import confirm_on_terminal
+    assert confirm_on_terminal("Sign?", device=str(tmp_path / "no-such-tty")) is None
