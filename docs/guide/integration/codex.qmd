@@ -73,8 +73,10 @@ What it writes:
 - Warnings when the registry sits inside the working directory, when no key is enrolled yet, and
   that SIB scores authorization but not risk, so a deploy rule is still yours to write.
 
-It places nothing in `$CODEX_HOME/skills/`. Signing is a command you run, never something an agent
-can do on your behalf: the ceremony needs your authenticator. See [Usage](#usage).
+The configuration is all it writes. Signing is a command you run, never something an agent can do
+on your behalf: the ceremony needs your authenticator, and the sandbox around the agent's own
+commands denies it the loopback listener besides. Your own `!` escape is not sandboxed — see
+[Usage](#usage).
 
 
 ## Setup

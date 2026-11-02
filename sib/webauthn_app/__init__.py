@@ -29,8 +29,11 @@ def check_can_listen(port: int, origin: str) -> None:
     guessing: the old message blamed port contention even when the real cause was
     a sandbox refusing to let the process listen at all. That is the common case
     for an agent running `sib sign` itself, and it is worth naming, because the
-    answer is not a different port — it is that signing is the user's own act and
-    belongs in the user's own shell.
+    answer is not a different port — it is that signing is the user's own act.
+
+    Their own shell is one way to run it; so is a harness's shell escape, which
+    runs in their shell rather than the agent's and is outside the sandbox that
+    stopped this. Codex's `!` is the case we have checked.
     """
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -40,8 +43,9 @@ def check_can_listen(port: int, origin: str) -> None:
         raise BrowserFlowError(
             f"not permitted to listen on {origin} ({e}). A sandbox is blocking the loopback "
             f"listener, which is what agent sandboxes normally do. The signing ceremony needs "
-            f"this server and your authenticator, so run the command yourself, in your own "
-            f"terminal, rather than through an agent.") from None
+            f"this server and your authenticator, so run the command yourself: in your own "
+            f"terminal, or through the harness's shell escape if it has one, such as Codex's "
+            f"`!sib sign \"...\"`.") from None
     except OSError as e:
         if e.errno in (errno.EADDRINUSE, errno.EACCES):
             raise BrowserFlowError(
