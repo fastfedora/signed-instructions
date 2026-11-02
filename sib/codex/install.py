@@ -18,30 +18,33 @@ import tomllib
 from pathlib import Path
 
 from . import EXTRA_POLICY_PATH, SKILL_PATH, TEMPLATE_PATH, TEMPLATE_SOURCE_COMMIT
+from ..first_run import ask_yes_no, ensure_audience, ensure_key
 from ..keys_dev import sib_home
-from ..registry import resolve_audience
+from ..registry import Registry
 
 def codex_home() -> Path:
     home = os.environ.get("CODEX_HOME")
     return Path(home).expanduser() if home else Path.home() / ".codex"
 
 
-def install_skill(target_home: Path, assume_yes: bool) -> None:
+def install_skill(target_home: Path) -> None:
     """Place the `sib-sign` skill, which walks the user through signing.
 
-    It grants nothing: Codex treats skill text as untrusted evidence, and
-    `sib sign` needs the user's own authenticator. It is a how-to, so the
-    answer is only ever the user's convenience.
+    Part of the integration rather than an offer, so it is not a question. It
+    grants nothing: Codex treats skill text as untrusted evidence, and `sib
+    sign` needs the user's own authenticator, so it is a how-to. An edited copy
+    is backed up rather than discarded.
     """
     dest = target_home / "skills" / "sib-sign" / "SKILL.md"
-    if dest.exists() and dest.read_text() == SKILL_PATH.read_text():
-        return
-    verb = "Replace" if dest.exists() else "Install"
-    if not (assume_yes or _ask(f"{verb} the sib-sign skill at {dest}?", default=True)):
-        print(f"# Skipped the skill. Copy {SKILL_PATH} to {dest} to add it later.", file=sys.stderr)
-        return
+    ours = SKILL_PATH.read_text()
+    if dest.exists():
+        if dest.read_text() == ours:
+            return
+        backup = dest.with_suffix(dest.suffix + ".sib-bak")
+        backup.write_text(dest.read_text())
+        print(f"backed up {dest} to {backup}", file=sys.stderr)
     dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(SKILL_PATH.read_text())
+    dest.write_text(ours)
     print(f"wrote {dest}")
 
 
@@ -136,15 +139,7 @@ def merge(text: str, auto_review_lines: list[str], reviewer: str | None) -> str:
     return text[:start] + "\n" + block + ("\n" + body if body.strip() else "") + text[end:]
 
 
-def _ask(question: str, default: bool) -> bool:
-    if not sys.stdin.isatty():
-        return default
-    suffix = " [Y/n] " if default else " [y/N] "
-    try:
-        answer = input(question + suffix).strip().lower()
-    except EOFError:
-        return default
-    return default if not answer else answer.startswith("y")
+_ask = ask_yes_no
 
 
 def check_environment(sib_path: str, home: Path) -> list[str]:
@@ -167,13 +162,12 @@ def check_environment(sib_path: str, home: Path) -> list[str]:
 
 def run_install(config: str | None = None, audience: str | None = None, sib_path: str | None = None,
                 home: str | None = None, print_only: bool = False, assume_yes: bool = False) -> None:
-    audience, audience_source = resolve_audience(audience)
-    if not audience:
-        raise SystemExit("no audience: the reviewer needs one to verify blocks. Record it once with "
-                         "`sib audience <name>`, or give --audience. It names this deployment, not "
-                         "the vendor, and must match what signers put in a block.")
     resolved_home = Path(home).expanduser() if home else sib_home()
     resolved_sib = sib_path or shutil.which("sib") or str(Path(sys.executable).with_name("sib"))
+    registry = Registry(resolved_home / "registry.json")
+    # --print writes nothing, the registry included, so there it stays a refusal
+    audience, audience_source = ensure_audience(registry, audience, assume_yes,
+                                                may_write=not print_only)
 
     print(f"# Audience {audience} (from {audience_source}), baked into the reviewer's command.",
           file=sys.stderr)
@@ -212,9 +206,7 @@ def run_install(config: str | None = None, audience: str | None = None, sib_path
     lines = build_auto_review_lines(resolved_sib, resolved_home, audience)
     merged = merge(text, lines, reviewer)
 
-    write = False
-    if not print_only:
-        write = assume_yes or _ask(f"Write this configuration to {target}?", default=True)
+    write = not print_only
     if write:
         target.parent.mkdir(parents=True, exist_ok=True)
         if text:
@@ -225,19 +217,13 @@ def run_install(config: str | None = None, audience: str | None = None, sib_path
         print(f"wrote {target}")
     else:
         print(merged if not text else "\n".join(["[auto_review]", *lines]))
-        if not print_only:
-            print(f"# Not written. Merge the above into {target}, or a project `.codex/config.toml`.",
-                  file=sys.stderr)
 
     if write:
-        install_skill(target.parent, assume_yes)
+        install_skill(target.parent)
+        ensure_key(registry, resolved_home)
 
     if reviewer is None and existing_reviewer != "auto_review":
         print("# The reviewer is not enabled in the config. Per run: codex exec --approve-for-me",
-              file=sys.stderr)
-    if not (resolved_home / "registry.json").exists():
-        print(f"# No keys enrolled yet at {resolved_home}. Until `sib keygen --signer <you> --enroll`\n"
-              f"# runs, every block verifies as unknown_signer, which is safe: nothing is authorized.",
               file=sys.stderr)
     print("# SIB scores authorization, not risk. A deploy or release is only refused when your own\n"
           "# policy says that class of action needs authorization; add that rule under [auto_review].",
@@ -246,7 +232,8 @@ def run_install(config: str | None = None, audience: str | None = None, sib_path
 
 def add_arguments(ap) -> None:
     ap.add_argument("--audience", help="the identifier this harness presents to the verifier "
-                                       "(default: SIB_AUDIENCE, else the registry's default_audience)")
+                                       "(default: SIB_AUDIENCE, else the registry's "
+                                       "default_audience, else asked for and recorded)")
     ap.add_argument("--config", help="config file to merge into "
                                      "(default: $CODEX_HOME/config.toml, else ~/.codex/config.toml)")
     ap.add_argument("--sib-path", help="absolute path to the sib binary the reviewer will run "

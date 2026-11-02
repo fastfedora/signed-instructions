@@ -1,5 +1,6 @@
 """CLI identifier defaults: either the signer or the kid is enough."""
 import datetime as dt
+import io
 import subprocess
 import sys
 import tomllib
@@ -166,7 +167,7 @@ def test_sign_refuses_an_assertion_that_does_not_verify(sib_home, monkeypatch):
 
 
 def test_install_codex_prints_a_usable_fragment(sib_home, tmp_path):
-    rc, so, se = run(["install", "codex", "--audience", "acme/dev-agent",
+    rc, so, se = run(["install", "codex", "--audience", "acme/dev-agent", "--config", str(tmp_path / "config.toml"),
                       "--home", str(tmp_path / "sib"), "--sib-path", "/usr/bin/true", "--print"])
     assert rc == 0
     assert "[auto_review]" in so and "experimental_policy_template" in so and "extra_policy" in so
@@ -237,6 +238,7 @@ def test_install_codex_needs_an_audience(sib_home, monkeypatch):
 def test_install_codex_warns_about_a_registry_inside_the_repo(sib_home, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     rc, so, se = run(["install", "codex", "--audience", "a/b", "--home", str(tmp_path / "inside"),
+                      "--config", str(tmp_path / "config.toml"),
                       "--sib-path", "/usr/bin/true", "--print"])
     assert rc == 0 and "inside the working directory" in se
 
@@ -260,7 +262,7 @@ def test_audience_resolution_order(sib_home, monkeypatch):
     monkeypatch.delenv("SIB_AUDIENCE", raising=False)
     assert resolve_audience() == (None, "unset")
     rc, so, se = run(["audience"])
-    assert rc != 0 and "names this deployment, not the vendor" in se
+    assert rc != 0 and "authorization context, not the vendor" in se
 
     rc, so, se = run(["audience", "my-company/trevor-dev"])
     assert rc == 0 and "recorded in" in so
@@ -351,3 +353,118 @@ def test_enroll_with_a_raw_public_key_says_it_cannot_verify(sib_home):
     rc, so, se = run(["enroll", "--signer", "evil@agent", "--kid", "evil@agent#k1",
                       "--public-key", "AAAA", "--alg", "ES256-webauthn"])
     assert rc == 0 and "records no AAGUID" in se and "authenticator_not_allowed" in se
+
+
+class _Tty(io.StringIO):
+    """Stands in for a terminal, so the setup questions are asked at all."""
+    def isatty(self):
+        return True
+
+
+def test_install_codex_offers_a_deployment_name(sib_home, tmp_path, monkeypatch):
+    """The audience is the one thing an install cannot derive. It is a question
+    with a suggestion, not a prerequisite found out by being refused."""
+    from sib.first_run import suggest_audience
+    monkeypatch.delenv("SIB_AUDIENCE", raising=False)
+    cfg = tmp_path / "config.toml"
+    rc, so, se = run(["install", "codex", "--config", str(cfg), "--sib-path", "/usr/bin/true", "--yes"])
+    assert rc == 0
+    assert Registry().default_audience == suggest_audience()        # recorded, not just used
+    assert f"--audience {suggest_audience()}" in cfg.read_text()    # and baked into the command
+    assert "No signing key enrolled" in se                          # the other half of the setup
+
+
+def test_install_codex_refuses_to_invent_a_name_unasked(sib_home, tmp_path, monkeypatch):
+    """Without a terminal and without --yes, nobody would see the name chosen,
+    and a wrong audience fails silently: it verifies nothing."""
+    monkeypatch.delenv("SIB_AUDIENCE", raising=False)
+    cfg = tmp_path / "config.toml"
+    rc, so, se = run(["install", "codex", "--config", str(cfg), "--sib-path", "/usr/bin/true"])
+    assert rc != 0 and "nobody to ask" in se
+    assert not cfg.exists() and Registry().default_audience is None
+
+
+def test_the_suggested_audience_names_the_machine_not_the_vendor(monkeypatch):
+    import socket
+    from sib.first_run import suggest_audience
+    monkeypatch.setattr(socket, "gethostname", lambda: "M4-Watchtower.local")
+    name = suggest_audience()
+    assert name.startswith("m4-watchtower/")
+    # a vendor name would be byte-identical in everyone's install, so one laptop's
+    # signature would verify in CI and in anyone else's copy of the same tool
+    for vendor in ("openai", "codex", "anthropic", "claude"):
+        assert vendor not in name
+
+
+def test_install_offers_a_key_and_prefers_a_passkey(sib_home, monkeypatch):
+    """A config with no key verifies every block as unknown_signer: correct, and
+    inert. The install offers the key too, so one command is enough."""
+    from sib import first_run
+    from sib.cli import default_kid
+    monkeypatch.setattr(sys, "stdin", _Tty())
+    asked = []
+
+    def yes_no(question, default):
+        asked.append(question)
+        return default if "Enroll" in question else False   # yes to enrolling, no to the passkey
+    monkeypatch.setattr(first_run, "ask_yes_no", yes_no)
+    monkeypatch.setattr(first_run, "ask_text", lambda question, default=None: "carol@example.com")
+    first_run.ensure_key(Registry(), sib_home)
+    assert "Enroll a signing key now?" in asked[0]
+    assert "passkey" in asked[1] and "fingerprint" in asked[1]      # asked first, and by name
+    fresh = Registry()
+    assert fresh.has_signer("carol@example.com")
+    assert fresh.lookup(default_kid("carol@example.com"))[1]["mode"] == "dev"
+
+
+def test_install_takes_no_for_an_answer_on_the_key(sib_home, monkeypatch, capsys):
+    from sib import first_run
+    monkeypatch.setattr(sys, "stdin", _Tty())
+    monkeypatch.setattr(first_run, "ask_yes_no", lambda question, default: False)
+    first_run.ensure_key(Registry(), sib_home)
+    assert Registry().signers == {}
+    assert "sib enroll --signer" in capsys.readouterr().err         # and says how, later
+
+
+def test_install_codex_replaces_an_edited_skill_but_keeps_it(sib_home, tmp_path):
+    """Placing the skill is part of the install, so it is not a question. An
+    edited copy is still not thrown away."""
+    cfg = tmp_path / "config.toml"
+    skill = tmp_path / "skills" / "sib-sign" / "SKILL.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_text("mine\n")
+    args = ["install", "codex", "--audience", "a/b", "--config", str(cfg),
+            "--home", str(tmp_path / "sib"), "--sib-path", "/usr/bin/true"]
+    rc, so, se = run(args)                                    # no --yes, nothing to confirm
+    assert rc == 0 and cfg.exists()
+    assert "sib-sign" in skill.read_text() and skill.read_text() != "mine\n"
+    assert (tmp_path / "skills" / "sib-sign" / "SKILL.md.sib-bak").read_text() == "mine\n"
+
+
+def test_install_offers_a_passkey_when_only_dev_keys_exist(sib_home, monkeypatch, registry):
+    """A software key is not a reason to stop asking: it leaves the install in dev
+    mode, where the sib-sign skill refuses to sign at all."""
+    from sib import first_run
+    monkeypatch.setattr(sys, "stdin", _Tty())
+    asked, enrolled = [], {}
+    monkeypatch.setattr(first_run, "ask_yes_no", lambda question, default: asked.append(question) or True)
+    monkeypatch.setattr(first_run, "ask_text",
+                        lambda question, default=None: asked.append(f"{question} [{default}]") or default)
+    monkeypatch.setattr(first_run, "_enroll",
+                        lambda signer, passkey, home: enrolled.update(signer=signer, passkey=passkey))
+    first_run.ensure_key(Registry(), sib_home)
+    assert asked[0] == "Enroll a passkey now?"                  # a passkey by name, not "a key"
+    assert "[alice@example.com]" in asked[1]                    # the signer already in the registry
+    assert enrolled == {"signer": "alice@example.com", "passkey": True}
+    assert len(asked) == 2                                      # and no dev-key fallback offered
+
+
+def test_install_says_nothing_when_a_passkey_is_enrolled(sib_home, monkeypatch, capsys):
+    from sib import first_run
+    from tests.fake_authenticator import FakeAuthenticator, enroll_fake
+    monkeypatch.setattr(sys, "stdin", _Tty())
+    monkeypatch.setattr(first_run, "ask_yes_no", lambda question, default: pytest.fail("asked anyway"))
+    reg = Registry()
+    enroll_fake(reg, FakeAuthenticator(), "alice@example.com", "alice@example.com#passkey-1")
+    first_run.ensure_key(reg, sib_home)
+    assert capsys.readouterr().err == ""

@@ -146,6 +146,45 @@ have edited it as easily. Anything that decides what a signature is worth belong
 cannot reach it.
 
 
+## The Audience Is One Exact Context
+
+The `aud` claim names the **authorization context**: the context within which signed instructions
+are valid. A machine is the usual answer, and `sib install` suggests one built from the hostname,
+but the concept is broader — `my-org/slackbot`, recorded on every host running that bot, is one
+context, as is a team or an environment.
+
+Two properties are settled. The name is a single opaque string, and matching is exact equality with
+no prefix or wildcard logic, so `my-company` does not accept a block signed for
+`my-company/trevor-dev`. The slash is a readability convention and nothing more. And the name is
+never the harness vendor: `openai/codex` would be byte-identical in everyone's installation, so a
+signature minted on one laptop would verify in CI and in anyone else's copy of the same tool, and
+the check would stop distinguishing anything.
+
+That exactness is load-bearing rather than fussy. Replay control is still the no-op store, and
+`aud` is one string, so the context is currently the only thing confining a block to where it was
+meant to apply. Widening a context widens replay in direct proportion: `my-org` means every agent
+in the organization honors the block for its whole lifetime, with expiry and narrowly worded text
+as the only remaining brakes.
+
+**Open, to discuss with the team.** One signature cannot span two contexts. A standing
+authorization meant for the whole organization and for one dev agent must be signed twice, and
+there are two candidate answers, neither built:
+
+- **An array.** `aud: ["my-org", "my-org/slackbot"]`, which
+  [RFC 7519](https://www.rfc-editor.org/rfc/rfc7519#section-4.1.3) already permits, with a verifier
+  that accepts a block if its own context appears in the list. The signer names every context
+  explicitly and nothing is inferred.
+- **Hierarchy.** Give the slash meaning, so a verifier in a narrow context accepts a block signed
+  for a broader context containing it — `my-org/slackbot` honoring an `my-org` authorization.
+
+If hierarchy is chosen, the direction is the whole security question. A narrow verifier may accept
+a broad authorization; a broad verifier must never accept a narrow one, or a block minted for one
+bot would authorize the organization. Prefix matching with that direction inverted is a hole, which
+is why neither is half-built. The current preference is the array, because authority is then named
+rather than derived from punctuation, and a rule that reads authority out of string shape is the
+kind that is wrong in exactly one edge case and silently.
+
+
 ## The Prompt Tells the Model What Is Verified
 
 The plan reserved `additionalContext` for the model and nothing else, and that is still its role.

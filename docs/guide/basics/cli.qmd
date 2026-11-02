@@ -146,11 +146,21 @@ Install SIB into an agent harness. Takes the harness as a sub-subcommand.
 #### install codex
 
 Writes the auto-review configuration that makes Codex's reviewer run `sib verify` itself and score
-a verified signature as user authorization.
+a verified signature as user authorization. It is meant to be the only command you type before
+launching Codex, so it asks for the two things no package can ship — a name for this authorization
+context, and a key to sign with — rather than refusing until you have arranged them yourself.
 
 It merges rather than overwrites, so it is safe to run against a configuration you already use.
 Every setting it does not own is left where it is, the previous file is copied to
 `<config>.sib-bak` before anything is written, and it asks before each change:
+
+- **Naming this authorization context** — the context signed instructions are valid in. Asked
+  first, with a suggestion built from the hostname and your account, such as
+  `m4-watchtower/trevor-dev`. The answer is recorded as the registry's
+  [`default_audience`](#audience), so `sign` and `verify` agree with the reviewer without being
+  told. A vendor name is deliberately not suggested: `openai/codex` would be byte-identical in
+  everyone's install and the check would stop distinguishing anything. Skipped when `--audience`,
+  `SIB_AUDIENCE` or a recorded default already answers it.
 
 - **Setting `approvals_reviewer = "auto_review"`** — the default is yes when the key is absent, and
   no when you have already set it to something else, since enabling the reviewer should not
@@ -160,25 +170,36 @@ Every setting it does not own is left where it is, the previous file is copied t
 - **Replacing `experimental_policy_template` or `extra_policy`** — asked only when a previous run
   (or you) already set them, and the default is no. Declining writes nothing at all.
 
-- **Writing the merged file** — the default is yes. Declining prints the `[auto_review]` keys for
-  you to place by hand.
+- **Enrolling a signing key** — asked last, and only when no passkey is enrolled, which is exactly
+  when the install cannot yet produce a signature that proves a person was there. With no keys at
+  all, every block verifies as `unknown_signer`: the safe direction, and an inert one. With only
+  software keys the install signs in dev mode, where a signature proves possession of a file and
+  the `sib-sign` skill refuses to use it — so an existing dev key is not a reason to stop asking.
+  A passkey is the default, and the only offer once software keys exist; the signer defaults to
+  the one already in the registry, or to this machine's `git config user.email`.
 
-It also offers to place a `sib-sign` skill at `$CODEX_HOME/skills/sib-sign/SKILL.md`, which walks
+Writing the file and placing the skill are not among the questions: they are what the command does,
+`--print` is how you look without writing, and nothing is discarded — the previous config and an
+edited skill are both copied to `.sib-bak` first.
+
+It places a `sib-sign` skill at `$CODEX_HOME/skills/sib-sign/SKILL.md`, which walks
 the user through signing an instruction and appending it to `AGENTS.md`. The skill grants nothing:
 Codex treats skill text as untrusted evidence, and `sib sign` needs the user's own authenticator,
 so it is a how-to rather than a capability. It tells the agent to decline when asked to sign its
 way around a refusal, and to stop if the registry is in dev mode, where a signature would need no
 human.
 
-Keys may be installed before any are enrolled. The installer creates no registry and says so:
-until `sib keygen --signer <you> --enroll` runs, every block verifies as `unknown_signer`, which
-is the safe direction — nothing is authorized.
+Both setup questions need a terminal. Non-interactively, `--yes` takes the suggested context name
+and prints it, and a key is never created on a script's behalf — a passkey needs the person at
+the authenticator, and a software key is a choice to make deliberately, so the install says how to
+enroll one later and leaves the registry empty. With neither a terminal nor `--yes` it refuses
+rather than invent a name nobody would see: a wrong audience is not a visible failure, it simply
+verifies nothing.
 
 `--audience ID`
 : The identifier this harness presents to the verifier, baked into the command the reviewer runs.
-  Falls back to `SIB_AUDIENCE` and then the registry's `default_audience`, so with
-  [`sib audience`](#audience) recorded you need not pass it. The installer prints which source it
-  used.
+  Falls back to `SIB_AUDIENCE` and then the registry's `default_audience`, and asks when none of
+  them answers, so you rarely pass it. The installer prints which source it used.
 
 `--config PATH`
 : Config file to merge into. The default follows Codex: `$CODEX_HOME/config.toml` when that
@@ -239,15 +260,21 @@ Show or set the registry's default audience, which `sign`, `verify` and `install
 audience is given.
 
 `VALUE`
-: The deployment name to record. Omit it to print the audience in force and where it came from.
+: The authorization context to record. Omit it to print the audience in force and where it came
+  from.
 
 ```bash
 sib audience my-company/trevor-dev     # record it once
 sib audience                           # my-company/trevor-dev   (from default_audience in ~/.sib/registry.json)
 ```
 
-The audience names **one deployment, not a vendor or a product**. Matching is exact: there is no
-prefix or wildcard logic, so `my-company` does not accept a block signed for
+[`sib install codex`](#install-codex) asks for this and records the answer, so recording one by
+hand is for renaming a context or scripting an install.
+
+The audience names **one authorization context, not a vendor or a product**: the context within
+which signed instructions are valid. A machine is the usual answer, but a bot or a team is as
+legitimate — `my-org/slackbot` set on every host running that bot is one context. Matching is
+exact: there is no prefix or wildcard logic, so `my-company` does not accept a block signed for
 `my-company/trevor-dev`. That is the point — a signature minted for your dev agent must not verify
 in CI, in a teammate's checkout, or in anyone else's copy of the same tool. Naming it after the
 harness vendor would give every installation in the world the same audience and the check would

@@ -244,7 +244,8 @@ def cmd_audience(a):
     audience, source = resolve_audience(None)
     if audience is None:
         raise SystemExit("no audience set. `sib audience <name>` records one; it names this "
-                         "deployment, not the vendor, and must match what signers put in a block")
+                         "authorization context, not the vendor, and must match what signers put "
+                         "in a block")
     print(f"{audience}   (from {source})")
 
 
@@ -325,7 +326,8 @@ def main(argv=None):
     aa.add_argument("label", help="a name for it, for the warning messages")
     aa.set_defaults(fn=cmd_allow_authenticator)
     au = sub.add_parser("audience", help="show or set the registry's default audience")
-    au.add_argument("value", nargs="?", help="the deployment name to record (omit to show)")
+    au.add_argument("value", nargs="?",
+                    help="the authorization context to record (omit to show)")
     au.set_defaults(fn=cmd_audience)
     i = sub.add_parser("inspect", help="decode blocks without verifying"); i.add_argument("file"); i.set_defaults(fn=cmd_inspect)
     a = ap.parse_args(argv)

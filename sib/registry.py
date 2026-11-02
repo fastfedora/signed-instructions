@@ -93,7 +93,7 @@ def resolve_audience(explicit: str | None = None) -> tuple[str | None, str]:
     """The audience to use, and where it came from.
 
     A flag wins, then SIB_AUDIENCE, then the registry's `default_audience`.
-    The name identifies one deployment, not a vendor or product: matching is
+    The name identifies one authorization context, not a vendor or product: matching is
     exact, so a block signed for another agent must not verify here. Returning
     the source lets a command say which of the three it used.
     """
