@@ -3,8 +3,10 @@ and `sign_in_browser` start the app on demand, open the page, wait for the
 authenticator's answer and stop the app again."""
 from __future__ import annotations
 
+import errno
 import os
 import shlex
+import socket
 import subprocess
 import sys
 import threading
@@ -17,6 +19,37 @@ from .app import AppState, create_app, sign_challenge
 
 class BrowserFlowError(RuntimeError):
     pass
+
+
+def check_can_listen(port: int, origin: str) -> None:
+    """Bind-test before starting the server, so the three reasons it can fail do
+    not share one message.
+
+    uvicorn logs its own error and the thread simply dies, which left the caller
+    guessing: the old message blamed port contention even when the real cause was
+    a sandbox refusing to let the process listen at all. That is the common case
+    for an agent running `sib sign` itself, and it is worth naming, because the
+    answer is not a different port — it is that signing is the user's own act and
+    belongs in the user's own shell.
+    """
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        s.bind(("127.0.0.1", port))
+    except PermissionError as e:
+        raise BrowserFlowError(
+            f"not permitted to listen on {origin} ({e}). A sandbox is blocking the loopback "
+            f"listener, which is what agent sandboxes normally do. The signing ceremony needs "
+            f"this server and your authenticator, so run the command yourself, in your own "
+            f"terminal, rather than through an agent.") from None
+    except OSError as e:
+        if e.errno in (errno.EADDRINUSE, errno.EACCES):
+            raise BrowserFlowError(
+                f"{origin} is already in use; another sib command may be waiting on it. "
+                f"SIB_WEBAUTHN_PORT changes the port.") from None
+        raise BrowserFlowError(f"could not listen on {origin}: {e}") from None
+    finally:
+        s.close()
 
 
 def open_url(url: str, browser: str | None = None) -> subprocess.Popen | None:
@@ -52,6 +85,7 @@ def run_in_browser(kind: str, payload: dict, challenge: bytes | None = None, tim
     import uvicorn
     origin = keys_webauthn.default_origin()
     state = AppState()
+    check_can_listen(keys_webauthn.port(), origin)
     token = state.add(kind, payload, challenge)
     server = uvicorn.Server(uvicorn.Config(create_app(state, origin), host="127.0.0.1", port=keys_webauthn.port(),
                                            log_level="warning", access_log=False))

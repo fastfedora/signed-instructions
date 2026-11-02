@@ -231,3 +231,31 @@ def test_open_url_picks_the_configured_browser(monkeypatch, tmp_path):
     assert log.read_text().split() == ["--new-window", "http://localhost:7391/z"]
     with pytest.raises(BrowserFlowError, match="could not open"):
         open_url("http://localhost:7391/z", str(tmp_path / "missing-browser"))
+
+
+def test_a_sandbox_that_forbids_listening_says_so(monkeypatch):
+    """The old message blamed port contention for every startup failure. An agent
+    running `sib sign` inside its sandbox hits a bind refusal, and the answer is
+    not a different port."""
+    import socket as socket_mod
+    from sib.webauthn_app import check_can_listen
+
+    def refuse(self, addr):
+        raise PermissionError(1, "operation not permitted")
+    monkeypatch.setattr(socket_mod.socket, "bind", refuse)
+    with pytest.raises(BrowserFlowError, match="sandbox is blocking the loopback listener"):
+        check_can_listen(7391, "http://localhost:7391")
+
+
+def test_a_port_already_taken_says_that_instead():
+    import socket as socket_mod
+    from sib.webauthn_app import check_can_listen
+    held = socket_mod.socket(socket_mod.AF_INET, socket_mod.SOCK_STREAM)
+    held.bind(("127.0.0.1", 0))
+    held.listen(1)
+    port = held.getsockname()[1]
+    try:
+        with pytest.raises(BrowserFlowError, match="already in use"):
+            check_can_listen(port, f"http://localhost:{port}")
+    finally:
+        held.close()
