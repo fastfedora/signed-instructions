@@ -174,8 +174,9 @@ NO_KEY_NOTE = (
 )
 
 DEV_ONLY_NOTE = (
-    "# Only software keys are enrolled at {home}, so this install signs in dev mode and the\n"
-    "# sib-sign skill will refuse to use it. Enroll a passkey with `sib enroll --signer <you>`."
+    "# Only software keys are enrolled at {home}, so this install signs in dev mode, and a\n"
+    "# dev-mode block confers nothing once any passkey exists. Enroll one with\n"
+    "# `sib enroll --signer <you>`."
 )
 
 
@@ -185,8 +186,10 @@ def ensure_key(reg: Registry, home: Path) -> None:
 
     The test is a passkey, not any key: a registry holding only software keys
     leaves the install in dev mode, where a signature proves possession of a
-    file, and the sib-sign skill refuses to use one. Skipping the offer because
-    some key exists is how someone ends up unable to sign and unable to see why.
+    file rather than the presence of a person, and where a block confers nothing
+    as soon as any passkey is enrolled anywhere in the registry. Skipping the
+    offer because some key exists is how someone ends up unable to sign for
+    real and unable to see why.
 
     Only ever interactive. A passkey cannot be enrolled without the person at
     the authenticator, and a software key is a security choice, so neither is a
@@ -202,8 +205,8 @@ def ensure_key(reg: Registry, home: Path) -> None:
 
     if dev_only:
         print("# Only software keys are enrolled, so this install signs in dev mode: a signature\n"
-              "# would prove possession of a key file rather than the presence of a person, and the\n"
-              "# sib-sign skill refuses to use one.", file=sys.stderr)
+              "# would prove possession of a key file rather than the presence of a person.",
+              file=sys.stderr)
         question = "Enroll a passkey now?"
     else:
         print("# Nothing can be signed yet: the registry has no keys, so every block would verify as\n"
@@ -222,7 +225,7 @@ def ensure_key(reg: Registry, home: Path) -> None:
 
     passkey = dev_only or ask_yes_no(
         "Use a passkey, so signing needs your fingerprint or face? Saying no makes a software key, "
-        "which proves only possession of a file and which the sib-sign skill refuses to use.",
+        "which proves only possession of a file.",
         default=True)
     _enroll(signer, passkey, home)
 

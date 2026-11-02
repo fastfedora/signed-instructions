@@ -226,21 +226,20 @@ Every setting it does not own is left where it is, the previous file is copied t
 - **Enrolling a signing key** — asked last, and only when no passkey is enrolled, which is exactly
   when the install cannot yet produce a signature that proves a person was there. With no keys at
   all, every block verifies as `unknown_signer`: the safe direction, and an inert one. With only
-  software keys the install signs in dev mode, where a signature proves possession of a file and
-  the `sib-sign` skill refuses to use it — so an existing dev key is not a reason to stop asking.
-  A passkey is the default, and the only offer once software keys exist; the signer defaults to
-  the one already in the registry, or to this machine's `git config user.email`.
+  software keys the install signs in dev mode, where a signature proves possession of a file and a
+  block confers nothing as soon as any passkey exists — so an existing dev key is not a reason to
+  stop asking. A passkey is the default, and the only offer once software keys exist; the signer
+  defaults to the one already in the registry, or to this machine's `git config user.email`.
 
-Writing the file and placing the skill are not among the questions: they are what the command does,
-`--print` is how you look without writing, and nothing is discarded — the previous config and an
-edited skill are both copied to `.sib-bak` first.
+Writing the file is not among the questions: it is what the command does, `--print` is how you look
+without writing, and the previous config is copied to `.sib-bak` first rather than discarded.
 
-It places a `sib-sign` skill at `$CODEX_HOME/skills/sib-sign/SKILL.md`, which walks
-the user through signing an instruction and appending it to `AGENTS.md`. The skill grants nothing:
-Codex treats skill text as untrusted evidence, and `sib sign` needs the user's own authenticator,
-so it is a how-to rather than a capability. It tells the agent to decline when asked to sign its
-way around a refusal, and to stop if the registry is in dev mode, where a signature would need no
-human.
+The install places nothing in `$CODEX_HOME/skills/`. Signing is a command the user runs —
+`! sib sign "..."` from inside Codex, or the same in their own terminal — and it was never
+something an agent could do on their behalf: the ceremony needs their authenticator, and Codex's
+sandbox denies the loopback listener it runs on. A skill describing the steps would have been a
+how-to that the reviewer correctly treats as untrusted text, and one more thing to keep in step
+with the CLI.
 
 Both setup questions need a terminal. Non-interactively, `--yes` takes the suggested context name
 and prints it, and a key is never created on a script's behalf — a passkey needs the person at

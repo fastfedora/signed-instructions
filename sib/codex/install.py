@@ -17,7 +17,7 @@ import sys
 import tomllib
 from pathlib import Path
 
-from . import EXTRA_POLICY_PATH, SKILL_PATH, TEMPLATE_PATH, TEMPLATE_SOURCE_COMMIT
+from . import EXTRA_POLICY_PATH, TEMPLATE_PATH, TEMPLATE_SOURCE_COMMIT
 from ..first_run import ask_yes_no, ensure_audience, ensure_key
 from ..keys_dev import sib_home
 from ..registry import Registry
@@ -25,27 +25,6 @@ from ..registry import Registry
 def codex_home() -> Path:
     home = os.environ.get("CODEX_HOME")
     return Path(home).expanduser() if home else Path.home() / ".codex"
-
-
-def install_skill(target_home: Path) -> None:
-    """Place the `sib-sign` skill, which walks the user through signing.
-
-    Part of the integration rather than an offer, so it is not a question. It
-    grants nothing: Codex treats skill text as untrusted evidence, and `sib
-    sign` needs the user's own authenticator, so it is a how-to. An edited copy
-    is backed up rather than discarded.
-    """
-    dest = target_home / "skills" / "sib-sign" / "SKILL.md"
-    ours = SKILL_PATH.read_text()
-    if dest.exists():
-        if dest.read_text() == ours:
-            return
-        backup = dest.with_suffix(dest.suffix + ".sib-bak")
-        backup.write_text(dest.read_text())
-        print(f"backed up {dest} to {backup}", file=sys.stderr)
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(ours)
-    print(f"wrote {dest}")
 
 
 def default_config() -> Path:
@@ -219,7 +198,6 @@ def run_install(config: str | None = None, audience: str | None = None, sib_path
         print(merged if not text else "\n".join(["[auto_review]", *lines]))
 
     if write:
-        install_skill(target.parent)
         ensure_key(registry, resolved_home)
 
     if reviewer is None and existing_reviewer != "auto_review":

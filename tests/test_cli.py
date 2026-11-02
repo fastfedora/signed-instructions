@@ -317,23 +317,6 @@ def test_the_allowlist_matches_the_published_names(sib_home):
     assert "bada5566-a7aa-401f-bd96-45619a55120d" not in A        # a software vault stays off
 
 
-def test_install_codex_places_the_signing_skill(sib_home, tmp_path):
-    home = tmp_path / "codex-home"
-    rc, so, se = run(["install", "codex", "--audience", "a/b", "--config", str(home / "config.toml"),
-                      "--home", str(tmp_path / "sib"), "--sib-path", "/usr/bin/true", "--yes"])
-    assert rc == 0
-    skill = home / "skills" / "sib-sign" / "SKILL.md"
-    assert skill.exists() and skill.read_text().startswith("---\nname: \"sib-sign\"")
-    # the skill must not read as a way for the agent to authorize itself
-    body = skill.read_text()
-    assert "Only when the user asks for a signature" in body
-    assert "not authorization" in body
-    # a second run is a no-op rather than a prompt, since the content is identical
-    rc, so, se = run(["install", "codex", "--audience", "a/b", "--config", str(home / "config.toml"),
-                      "--home", str(tmp_path / "sib"), "--sib-path", "/usr/bin/true", "--yes"])
-    assert rc == 0 and str(skill) not in so
-
-
 def test_a_keyless_aaguid_cannot_be_allowlisted(sib_home):
     """The hole this closes: `enroll --public-key` records no AAGUID, so allowing
     the empty or all-zero value would accept an agent's own software key."""
@@ -428,24 +411,9 @@ def test_install_takes_no_for_an_answer_on_the_key(sib_home, monkeypatch, capsys
     assert "sib enroll --signer" in capsys.readouterr().err         # and says how, later
 
 
-def test_install_codex_replaces_an_edited_skill_but_keeps_it(sib_home, tmp_path):
-    """Placing the skill is part of the install, so it is not a question. An
-    edited copy is still not thrown away."""
-    cfg = tmp_path / "config.toml"
-    skill = tmp_path / "skills" / "sib-sign" / "SKILL.md"
-    skill.parent.mkdir(parents=True)
-    skill.write_text("mine\n")
-    args = ["install", "codex", "--audience", "a/b", "--config", str(cfg),
-            "--home", str(tmp_path / "sib"), "--sib-path", "/usr/bin/true"]
-    rc, so, se = run(args)                                    # no --yes, nothing to confirm
-    assert rc == 0 and cfg.exists()
-    assert "sib-sign" in skill.read_text() and skill.read_text() != "mine\n"
-    assert (tmp_path / "skills" / "sib-sign" / "SKILL.md.sib-bak").read_text() == "mine\n"
-
-
 def test_install_offers_a_passkey_when_only_dev_keys_exist(sib_home, monkeypatch, registry):
     """A software key is not a reason to stop asking: it leaves the install in dev
-    mode, where the sib-sign skill refuses to sign at all."""
+    mode, where a block confers nothing once any passkey exists."""
     from sib import first_run
     monkeypatch.setattr(sys, "stdin", _Tty())
     asked, enrolled = [], {}
