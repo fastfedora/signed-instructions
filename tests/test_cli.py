@@ -48,14 +48,14 @@ def test_keygen_needs_one_identifier(sib_home):
 
 def test_sign_with_signer_only(sib_home):
     run(["keygen", "--signer", "alice@example.com", "--enroll"])
-    rc, out, err = run(["sign", "-y", "--signer", "alice@example.com", "--out", "-", "--file", "-"],
+    rc, out, err = run(["sign", "--signer", "alice@example.com", "--out", "-", "--file", "-"],
                        stdin="Deploy to staging.")
     assert rc == 0 and "BEGIN SIB SIGNED INSTRUCTION" in out and "kid=alice@example.com#dev-" in err
 
 
 def test_sign_with_kid_only_derives_signer(sib_home):
     run(["keygen", "--signer", "alice@example.com", "--kid", "alice@example.com#laptop", "--enroll"])
-    rc, out, err = run(["sign", "-y", "--kid", "alice@example.com#laptop", "--out", "-", "--file", "-"],
+    rc, out, err = run(["sign", "--kid", "alice@example.com#laptop", "--out", "-", "--file", "-"],
                        stdin="Deploy to staging.")
     assert rc == 0 and "Signer: alice@example.com" in out
 
@@ -63,19 +63,19 @@ def test_sign_with_kid_only_derives_signer(sib_home):
 def test_sign_refuses_ambiguous_signer_and_mismatch(sib_home):
     run(["keygen", "--signer", "alice@example.com", "--kid", "alice@example.com#a", "--enroll"])
     run(["keygen", "--signer", "alice@example.com", "--kid", "alice@example.com#b", "--enroll"])
-    rc, out, err = run(["sign", "-y", "--signer", "alice@example.com", "--file", "-"], stdin="x")
+    rc, out, err = run(["sign", "--signer", "alice@example.com", "--file", "-"], stdin="x")
     assert rc != 0 and "several keys" in err
-    rc, out, err = run(["sign", "-y", "--signer", "bob@example.com", "--kid", "alice@example.com#a", "--file", "-"], stdin="x")
+    rc, out, err = run(["sign", "--signer", "bob@example.com", "--kid", "alice@example.com#a", "--file", "-"], stdin="x")
     assert rc != 0 and "not 'bob@example.com'" in err
-    rc, out, err = run(["sign", "-y", "--file", "-"], stdin="x")
+    rc, out, err = run(["sign", "--file", "-"], stdin="x")
     assert rc != 0 and "give --kid or --signer" in err
 
 
 def test_sign_text_flag(sib_home):
     run(["keygen", "--signer", "alice@example.com", "--enroll"])
-    rc, out, err = run(["sign", "-y", "--signer", "alice@example.com", "--out", "-", "--text", "Deploy to staging."])
+    rc, out, err = run(["sign", "--signer", "alice@example.com", "--out", "-", "--text", "Deploy to staging."])
     assert rc == 0 and "\nDeploy to staging.\n-----BEGIN SIB SIGNATURE-----" in out
-    rc, out, err = run(["sign", "-y", "--signer", "alice@example.com", "--text", "x", "--file", "-"], stdin="y")
+    rc, out, err = run(["sign", "--signer", "alice@example.com", "--text", "x", "--file", "-"], stdin="y")
     assert rc != 0 and "give the instruction once" in err
 
 
@@ -135,9 +135,9 @@ def test_sign_prefers_passkey_and_dev_flag_picks_the_dev_key(sib_home, monkeypat
     import sib.webauthn_app
     monkeypatch.setattr(sib.webauthn_app, "sign_in_browser", _fake_sign_in_browser(auth))
     # the passkey wins without --dev, and needs an audience
-    rc, out, err = run(["sign", "-y", "--signer", "alice@example.com", "--text", "Deploy to staging."])
+    rc, out, err = run(["sign", "--signer", "alice@example.com", "--text", "Deploy to staging."])
     assert rc != 0 and "--audience is required" in err
-    rc, out, err = run(["sign", "-y", "--signer", "alice@example.com", "--audience", "acme/dev-agent", "--text", "Deploy to staging."])
+    rc, out, err = run(["sign", "--signer", "alice@example.com", "--audience", "acme/dev-agent", "--text", "Deploy to staging."])
     assert rc == 0, err
     assert "mode=enforced" in err and "signed with alice@example.com#passkey-1" in err and "DEV MODE" not in err
     assert "BEGIN SIB SIGNED INSTRUCTION" in out
@@ -147,7 +147,7 @@ def test_sign_prefers_passkey_and_dev_flag_picks_the_dev_key(sib_home, monkeypat
     assert rc == 0 and "VERIFIED alice@example.com" in vout and "mode enforced" in vout and "DEV MODE" not in verr
     # --dev signs with the dev key, which the default (enforced) verify refuses and --dev accepts
     keys_dev._warned = False      # the warning prints once per process; keygen above already printed it
-    rc, out, err = run(["sign", "-y", "--signer", "alice@example.com", "--dev", "--text", "Deploy to staging."])
+    rc, out, err = run(["sign", "--signer", "alice@example.com", "--dev", "--text", "Deploy to staging."])
     assert rc == 0 and "mode=dev" in err and "DEV MODE" in err
     (sib_home / "dev.txt").write_text(out)
     rc, vout, verr = run(["verify", str(sib_home / "dev.txt")])
@@ -156,7 +156,7 @@ def test_sign_prefers_passkey_and_dev_flag_picks_the_dev_key(sib_home, monkeypat
     rc, vout, verr = run(["verify", str(sib_home / "dev.txt"), "--dev"])
     assert rc == 0 and "DEV MODE" in verr
     # --dev with a passkey kid is refused
-    rc, out, err = run(["sign", "-y", "--kid", "alice@example.com#passkey-1", "--dev", "--text", "x"])
+    rc, out, err = run(["sign", "--kid", "alice@example.com#passkey-1", "--dev", "--text", "x"])
     assert rc != 0 and "--dev signs with a dev key" in err
 
 
@@ -167,7 +167,7 @@ def test_sign_refuses_an_assertion_that_does_not_verify(sib_home, monkeypatch):
     reg.save()
     import sib.webauthn_app
     monkeypatch.setattr(sib.webauthn_app, "sign_in_browser", _fake_sign_in_browser(auth))
-    rc, out, err = run(["sign", "-y", "--signer", "alice@example.com", "--audience", "a", "--text", "x"])
+    rc, out, err = run(["sign", "--signer", "alice@example.com", "--audience", "a", "--text", "x"])
     assert rc != 0 and "authenticator_not_allowed" in err and "no block written" in err and out == ""
 
 
@@ -286,7 +286,7 @@ def test_sign_and_verify_use_the_recorded_audience(sib_home, tmp_path, monkeypat
     run(["keygen", "--signer", "alice@example.com", "--enroll", "--audience", "my-company/trevor-dev"])
     assert Registry().default_audience == "my-company/trevor-dev"
     out = tmp_path / "b.txt"
-    rc, so, se = run(["sign", "-y", "--signer", "alice@example.com", "--text", "You may deploy to staging.",
+    rc, so, se = run(["sign", "--signer", "alice@example.com", "--text", "You may deploy to staging.",
                       "--out", str(out)])
     assert rc == 0 and "my-company/trevor-dev" in se       # named, with its source, before signing
     # the block carries it, and a verifier with no flag accepts it
@@ -448,7 +448,7 @@ def test_sign_falls_back_to_the_git_identity(sib_home, registry, monkeypatch):
     but only when a key is enrolled for them."""
     from sib import cli
     monkeypatch.setattr(cli, "git_signer", lambda: "alice@example.com")
-    rc, so, se = run(["sign", "-y", "--out", "-", "--text", "You may deploy to staging."])
+    rc, so, se = run(["sign", "--out", "-", "--text", "You may deploy to staging."])
     assert rc == 0 and "BEGIN SIB SIGNED INSTRUCTION" in so
     assert "signing as alice@example.com (git config user.email)" in se
 
@@ -458,10 +458,10 @@ def test_sign_says_when_the_git_identity_has_no_key(sib_home, registry, monkeypa
     time, a long way from the missing flag that caused it."""
     from sib import cli
     monkeypatch.setattr(cli, "git_signer", lambda: "nobody@example.com")
-    rc, so, se = run(["sign", "-y", "--text", "x"])
+    rc, so, se = run(["sign", "--text", "x"])
     assert rc != 0 and "nothing is enrolled for 'nobody@example.com'" in se and "git identity" in se
     monkeypatch.setattr(cli, "git_signer", lambda: None)
-    rc, so, se = run(["sign", "-y", "--text", "x"])
+    rc, so, se = run(["sign", "--text", "x"])
     assert rc != 0 and "give --kid or --signer" in se
 
 
@@ -470,10 +470,10 @@ def test_sign_has_no_expiry_by_default(sib_home, registry, monkeypatch):
     the absence of --expires means the absence of the claim."""
     from sib import cli
     monkeypatch.setattr(cli, "git_signer", lambda: "alice@example.com")
-    rc, so, se = run(["sign", "-y", "--out", "-", "--text", "You may deploy to staging."])
+    rc, so, se = run(["sign", "--out", "-", "--text", "You may deploy to staging."])
     assert rc == 0 and "expires=never, valid until removed" in se
     assert "Expires:" not in so                       # no clear line either
-    rc, so, se = run(["sign", "-y", "--out", "-", "--text", "x", "--expires", "2h"])
+    rc, so, se = run(["sign", "--out", "-", "--text", "x", "--expires", "2h"])
     assert rc == 0 and "Expires:" in so               # and one appears when asked for
 
 
@@ -484,19 +484,19 @@ def test_the_instruction_can_be_an_argument(sib_home, registry, monkeypatch):
     to be sayable without a flag."""
     from sib import cli
     monkeypatch.setattr(cli, "git_signer", lambda: "alice@example.com")
-    rc, so, se = run(["sign", "-y", "--out", "-", "You may deploy to staging."])
+    rc, so, se = run(["sign", "--out", "-", "You may deploy to staging."])
     assert rc == 0 and "\nYou may deploy to staging.\n-----BEGIN SIB SIGNATURE-----" in so
 
 
 def test_the_instruction_can_come_from_stdin_with_no_flag(sib_home, registry, monkeypatch):
     from sib import cli
     monkeypatch.setattr(cli, "git_signer", lambda: "alice@example.com")
-    rc, so, se = run(["sign", "-y", "--out", "-"], stdin="You may deploy to staging.\n")
+    rc, so, se = run(["sign", "--out", "-"], stdin="You may deploy to staging.\n")
     assert rc == 0 and "\nYou may deploy to staging.\n-----BEGIN SIB SIGNATURE-----" in so
 
 
 def test_two_sources_for_one_instruction_is_refused(sib_home, registry):
-    rc, so, se = run(["sign", "-y", "--signer", "alice@example.com", "--out", "-", "first", "--text", "second"])
+    rc, so, se = run(["sign", "--signer", "alice@example.com", "--out", "-", "first", "--text", "second"])
     assert rc != 0 and "give the instruction once" in se
 
 
@@ -522,7 +522,7 @@ def test_the_block_lands_in_the_nearest_agents_file(sib_home, registry, monkeypa
     work = tmp_path / "src" / "deep"
     work.mkdir(parents=True)
     monkeypatch.chdir(work)
-    rc, so, se = run(["sign", "-y", "You may deploy to staging."])
+    rc, so, se = run(["sign", "You may deploy to staging."])
     assert rc == 0, se
     text = agents.read_text()
     assert text.startswith("# Project\n\nBuild with make.\n")       # nothing overwritten
@@ -538,8 +538,8 @@ def test_a_second_block_joins_the_first(sib_home, registry, monkeypatch, tmp_pat
     agents = tmp_path / "AGENTS.md"
     agents.write_text("# Project")                      # no trailing newline
     monkeypatch.chdir(tmp_path)
-    assert run(["sign", "-y", "First."])[0] == 0
-    assert run(["sign", "-y", "Second."])[0] == 0
+    assert run(["sign", "First."])[0] == 0
+    assert run(["sign", "Second."])[0] == 0
     text = agents.read_text()
     assert text.startswith("# Project\n\n-----BEGIN")  # a newline of its own was added
     assert text.count("-----BEGIN SIB SIGNED INSTRUCTION-----") == 2
@@ -552,7 +552,7 @@ def test_agents_md_wins_over_claude_md_in_one_directory(sib_home, registry, monk
     (tmp_path / "AGENTS.md").write_text("a\n")
     (tmp_path / "CLAUDE.md").write_text("c\n")
     monkeypatch.chdir(tmp_path)
-    assert run(["sign", "-y", "x"])[0] == 0
+    assert run(["sign", "x"])[0] == 0
     assert "BEGIN SIB" in (tmp_path / "AGENTS.md").read_text()
     assert "BEGIN SIB" not in (tmp_path / "CLAUDE.md").read_text()
 
@@ -563,7 +563,7 @@ def test_claude_md_is_used_when_there_is_no_agents_md(sib_home, registry, monkey
     (tmp_path / ".git").mkdir()
     (tmp_path / "CLAUDE.md").write_text("c\n")
     monkeypatch.chdir(tmp_path)
-    assert run(["sign", "-y", "x"])[0] == 0
+    assert run(["sign", "x"])[0] == 0
     assert "BEGIN SIB" in (tmp_path / "CLAUDE.md").read_text()
 
 
@@ -577,7 +577,7 @@ def test_the_search_stops_at_the_repository_root(sib_home, registry, monkeypatch
     repo = tmp_path / "repo"
     (repo / ".git").mkdir(parents=True)
     monkeypatch.chdir(repo)
-    rc, so, se = run(["sign", "-y", "x"])
+    rc, so, se = run(["sign", "x"])
     assert rc == 0 and "BEGIN SIB SIGNED INSTRUCTION" in so    # printed, not appended
     assert "BEGIN SIB" not in outer.read_text()
 
@@ -587,9 +587,9 @@ def test_append_names_the_file_outright(sib_home, registry, monkeypatch, tmp_pat
     monkeypatch.setattr(cli, "git_signer", lambda: "alice@example.com")
     target = tmp_path / "notes.md"
     target.write_text("notes\n")
-    rc, so, se = run(["sign", "-y", "--append", str(target), "x"])
+    rc, so, se = run(["sign", "--append", str(target), "x"])
     assert rc == 0 and target.read_text().startswith("notes\n\n-----BEGIN")
-    rc, so, se = run(["sign", "-y", "--append", str(target), "--out", "x", "y"])
+    rc, so, se = run(["sign", "--append", str(target), "--out", "x", "y"])
     assert rc != 0 and "not both" in se
 
 
@@ -638,46 +638,44 @@ def test_keygen_without_enroll_still_writes_the_key(sib_home, registry):
     assert rc == 0 and "dev key created" in so
 
 
-def test_signing_asks_before_it_opens_the_authenticator(sib_home, registry, monkeypatch):
-    """The terms are shown and then approved on the terminal, which is the one
-    channel an agent that can set environment variables does not hold."""
+def test_the_terms_are_printed_before_the_ceremony(sib_home, registry, monkeypatch):
+    """Everything that carries authority reaches the terminal before anything is
+    signed. The terminal does not ask -- approval happens on the sign page, the
+    one surface a signer is certain to be looking at -- but a signer who has a
+    terminal should be able to read the terms there too."""
     from sib import cli
     monkeypatch.setattr(cli, "git_signer", lambda: "alice@example.com")
-    asked = []
-    monkeypatch.setattr(cli, "confirm_on_terminal", lambda q, *a, **k: asked.append(q) or True)
     rc, so, se = run(["sign", "--out", "-", "--audience", "acme/dev-agent", "--expires", "2h",
                       "You may deploy to staging."])
-    assert rc == 0 and asked == ["Sign this instruction?"]
-    # everything that carries authority is in front of them before they answer
+    assert rc == 0, se
     assert "You may deploy to staging." in se
     assert "signer=alice@example.com" in se and "kid=alice@example.com#dev-" in se
     assert "audience=acme/dev-agent" in se and "expires=" in se
     assert "printing the block to stdout" in se
 
 
-def test_a_no_at_the_confirmation_signs_nothing(sib_home, registry, monkeypatch, tmp_path):
+def test_signing_needs_no_terminal(sib_home, registry, monkeypatch, tmp_path):
+    """There is nothing left to ask at a terminal, so not having one is not a
+    refusal. A signer whose command is run by something that owns the keyboard
+    -- an agent harness's shell escape -- has no controlling terminal, and that
+    is the ordinary case rather than an unattended one."""
     from sib import cli
     monkeypatch.setattr(cli, "git_signer", lambda: "alice@example.com")
-    monkeypatch.setattr(cli, "confirm_on_terminal", lambda q, *a, **k: False)
     agents = tmp_path / "AGENTS.md"
     agents.write_text("# Project\n")
     monkeypatch.chdir(tmp_path)
     rc, so, se = run(["sign", "You may deploy to staging."])
-    assert rc != 0 and "not signing" in se
-    assert agents.read_text() == "# Project\n"       # nothing appended
-    assert so == ""
+    assert rc == 0, se
+    assert "BEGIN SIB SIGNED INSTRUCTION" in agents.read_text()
+    assert "no terminal" not in se
 
 
-def test_no_terminal_and_no_yes_refuses_rather_than_assuming(sib_home, registry, monkeypatch):
-    """An unattended signer has to say so. Treating silence as approval would
-    make the confirmation disappear exactly where nobody is watching."""
-    from sib import cli
-    monkeypatch.setattr(cli, "git_signer", lambda: "alice@example.com")
-    monkeypatch.setattr(cli, "confirm_on_terminal", lambda q, *a, **k: None)
-    rc, so, se = run(["sign", "--out", "-", "x"])
-    assert rc != 0 and "no terminal to confirm at" in se and "-y" in se
-    rc, so, se = run(["sign", "-y", "--out", "-", "x"])
-    assert rc == 0 and "BEGIN SIB SIGNED INSTRUCTION" in so
+def test_there_is_no_way_to_skip_a_confirmation_that_no_longer_exists(sib_home, registry):
+    """-y is gone. It only ever skipped the terminal question, and the page the
+    signer approves on now shows every term that question covered, including
+    where the block is going, so there was nothing left for it to skip."""
+    rc, so, se = run(["sign", "--out", "-", "-y", "x"])
+    assert rc != 0 and "unrecognized arguments: -y" in se
 
 
 def test_the_confirmation_code_is_printed_for_a_passkey(sib_home, monkeypatch):
@@ -691,7 +689,7 @@ def test_the_confirmation_code_is_printed_for_a_passkey(sib_home, monkeypatch):
     enroll_fake(reg, auth, "alice@example.com", "alice@example.com#passkey-1")
     reg.save()
     monkeypatch.setattr(sib.webauthn_app, "sign_in_browser", _fake_sign_in_browser(auth))
-    rc, so, se = run(["sign", "-y", "--out", "-", "--signer", "alice@example.com",
+    rc, so, se = run(["sign", "--out", "-", "--signer", "alice@example.com",
                       "--audience", "acme/dev-agent", "You may deploy to staging."])
     assert rc == 0, se
     line = next(l for l in se.splitlines() if "confirmation code" in l)
@@ -713,7 +711,7 @@ def test_the_page_is_told_where_the_block_will_go(sib_home, monkeypatch):
     monkeypatch.setattr(sib.webauthn_app, "sign_in_browser", _fake_sign_in_browser(auth, seen))
     agents = sib_home / "AGENTS.md"
     agents.write_text("# Project\n")
-    rc, so, se = run(["sign", "-y", "--append", str(agents), "--signer", "alice@example.com",
+    rc, so, se = run(["sign", "--append", str(agents), "--signer", "alice@example.com",
                       "--audience", "acme/dev-agent", "You may deploy to staging."])
     assert rc == 0, se
     assert seen["action"] == f"appending to {agents}"
@@ -731,12 +729,12 @@ def test_the_destination_shown_to_the_signer_is_the_one_used(sib_home, monkeypat
     reg.save()
     seen = {}
     monkeypatch.setattr(sib.webauthn_app, "sign_in_browser", _fake_sign_in_browser(auth, seen))
-    rc, so, se = run(["sign", "-y", "--out", "-", "--signer", "alice@example.com",
+    rc, so, se = run(["sign", "--out", "-", "--signer", "alice@example.com",
                       "--audience", "acme/dev-agent", "x"])
     assert rc == 0 and seen["action"] == "printing the block to stdout"
     assert "  printing the block to stdout" in se       # and the terminal says the same
     out = sib_home / "block.txt"
-    rc, so, se = run(["sign", "-y", "--out", str(out), "--signer", "alice@example.com",
+    rc, so, se = run(["sign", "--out", str(out), "--signer", "alice@example.com",
                       "--audience", "acme/dev-agent", "x"])
     assert rc == 0 and seen["action"] == f"writing {out}" and f"  writing {out}" in se
 
@@ -750,14 +748,14 @@ def test_the_code_the_terminal_prints_is_the_code_the_page_shows(sib_home, monke
     from sib.canon import canonicalize
     from sib.envelope import extract
     from sib.header import Header
-    from sib import keys_webauthn
+    from sib import cli, keys_webauthn
     import sib.webauthn_app
     auth = FakeAuthenticator()
     reg = Registry()
     enroll_fake(reg, auth, "alice@example.com", "alice@example.com#passkey-1")
     reg.save()
     monkeypatch.setattr(sib.webauthn_app, "sign_in_browser", _fake_sign_in_browser(auth))
-    rc, so, se = run(["sign", "-y", "--out", "-", "--signer", "alice@example.com",
+    rc, so, se = run(["sign", "--out", "-", "--signer", "alice@example.com",
                       "--audience", "acme/dev-agent", "You may deploy to staging."])
     assert rc == 0, se
     printed = next(l for l in se.splitlines() if "confirmation code" in l).split("confirmation code ")[1].split(",")[0]
@@ -766,44 +764,3 @@ def test_the_code_the_terminal_prints_is_the_code_the_page_shows(sib_home, monke
     h = Header.decode(block.compact.split("..")[0])
     challenge = keys_webauthn.challenge(h.signing_header().encode(), canonicalize(h.canon, block.text))
     assert keys_webauthn.code_for_challenge(challenge) == printed
-
-
-def test_the_confirmation_is_asked_on_a_terminal(tmp_path):
-    """The real function against a real terminal device.
-
-    Everything else here replaces `confirm_on_terminal`, which is how a first
-    version that could never succeed went unnoticed: it opened /dev/tty as
-    `r+`, a terminal is not seekable, and the `io.UnsupportedOperation` that
-    raises is an OSError -- so it read as "no terminal" and refused every
-    signature.
-    """
-    import os
-    import pty
-    from sib.first_run import confirm_on_terminal
-    master, slave = pty.openpty()
-    dev = os.ttyname(slave)
-    try:
-        os.write(master, b"y\n")
-        assert confirm_on_terminal("Sign this instruction?", device=dev) is True
-        assert b"Sign this instruction? [y/N]" in os.read(master, 400)
-
-        os.write(master, b"\n")                     # bare Enter takes the default
-        assert confirm_on_terminal("Sign?", device=dev) is False
-        os.read(master, 400)
-        os.write(master, b"\n")
-        assert confirm_on_terminal("Sign?", default=True, device=dev) is True
-        os.read(master, 400)
-
-        os.write(master, b"yes\n")
-        assert confirm_on_terminal("Sign?", device=dev) is True
-        os.read(master, 400)
-        os.write(master, b"nope\n")                 # anything else is a no
-        assert confirm_on_terminal("Sign?", device=dev) is False
-    finally:
-        os.close(master)
-        os.close(slave)
-
-
-def test_a_missing_terminal_is_not_an_approval(tmp_path):
-    from sib.first_run import confirm_on_terminal
-    assert confirm_on_terminal("Sign?", device=str(tmp_path / "no-such-tty")) is None

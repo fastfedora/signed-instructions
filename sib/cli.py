@@ -17,7 +17,7 @@ from .envelope import render, extract
 from .header import Header, signing_input, format_time
 from .manifest import build_manifest, render_classifier_note, to_json
 from .nonce_store import NoopNonceStore
-from .first_run import confirm_on_terminal, git_signer
+from .first_run import git_signer
 from .registry import Registry, resolve_audience, default_mode
 from .verify import verify_block, clear_lines
 
@@ -84,8 +84,9 @@ def describe_destination(dest: Path | None, append: bool) -> str:
     authorizes an action, not only a text: the same words appended to a
     repository's AGENTS.md and printed to stdout grant different things, because
     what a block authorizes is decided by the file an agent reads it from. So
-    where it lands belongs with the terms the signer approves, and the signer
-    may be reading them in the browser rather than in a terminal.
+    where it lands belongs with the terms the signer approves -- and they
+    approve them in the browser, which is the one surface a signer is certain
+    to be looking at, terminal or no terminal.
     """
     if dest is None:
         return "printing the block to stdout"
@@ -267,20 +268,14 @@ def cmd_sign(a):
           file=sys.stderr)
     action = describe_destination(dest, append)
     print("  " + action, file=sys.stderr)
-    # The page the signer approves on is served from http://localhost, an origin
-    # any local process can take, and WebAuthn shows the authenticator's prompt
-    # without the text. The code ties this terminal to that page.
-    code = keys_webauthn.code_for_challenge(
-        keys_webauthn.challenge(h.signing_header().encode(), ctext)) if webauthn else None
-    if code:
+    # The page the signer approves on is served from http://localhost, an origin any
+    # local process can take, and WebAuthn shows the authenticator's prompt without
+    # the text. The code ties this terminal to that page, for a signer who has one
+    # in front of them; the page shows its own, derived from the same challenge.
+    if webauthn:
+        code = keys_webauthn.code_for_challenge(
+            keys_webauthn.challenge(h.signing_header().encode(), ctext))
         print(f"  confirmation code {code}, which the sign page must show", file=sys.stderr)
-    if not a.yes:
-        ok = confirm_on_terminal("Sign this instruction?")
-        if ok is None:
-            raise SystemExit("not signing: there is no terminal to confirm at. Pass -y to sign without "
-                             "confirming, which is for a signer running unattended.")
-        if not ok:
-            raise SystemExit("not signing")
     if webauthn:
         from .webauthn_app import sign_in_browser, BrowserFlowError
         t0 = time.time()
@@ -438,8 +433,6 @@ def main(argv=None):
     s.add_argument("--out", help="write the block to this file, or - for stdout (default: append to the "
                                  "nearest AGENTS.md or CLAUDE.md, else stdout)")
     s.add_argument("--append", help="append the block to this file instead of searching for one")
-    s.add_argument("-y", "--yes", action="store_true",
-                   help="sign without confirming the terms first; for an unattended signer")
     s.add_argument("--dev", action="store_true", help="sign with a dev key even when a passkey is enrolled")
     s.add_argument("--timeout", type=float, default=180, help="seconds to wait for the browser")
     s.add_argument("--no-browser", action="store_true", help="print the page URL instead of opening a browser")

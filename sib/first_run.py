@@ -46,46 +46,6 @@ def ask_text(question: str, default: str | None = None) -> str | None:
 
 # ---- the audience ----
 
-def confirm_on_terminal(question: str, default: bool = False, device: str = "/dev/tty") -> bool | None:
-    """Ask on the controlling terminal, not on stdin, and return None when there
-    is no terminal to ask at.
-
-    The thing being confirmed may itself have arrived on stdin, which leaves
-    nothing there to read an answer from; and where the question is whether a
-    person approves, the answer has to come from the person at the keyboard
-    rather than from whatever filled the pipe. Writing the prompt to the
-    terminal too means a redirected stderr cannot hide it.
-
-    Two handles, rather than one opened `r+`: a terminal is not seekable, and
-    Python's buffered read-write mode insists that it is, so `r+` raises
-    `io.UnsupportedOperation` every time, on every platform. That exception
-    subclasses OSError, so it arrived here indistinguishable from having no
-    terminal at all -- the first version of this function could only ever
-    return None, which turned the confirmation into an unconditional refusal.
-
-    `device` is the seam the test uses to point this at a pty, because the real
-    path cannot be exercised anywhere that lacks a controlling terminal, which
-    includes most places tests run.
-    """
-    try:
-        reader = open(device, "r")
-    except OSError:
-        return None
-    try:
-        with open(device, "w") as writer:
-            writer.write(question + (" [Y/n] " if default else " [y/N] "))
-            writer.flush()
-        line = reader.readline()
-    except OSError:
-        return None
-    finally:
-        reader.close()
-    if not line:
-        return None
-    answer = line.strip().lower()
-    return default if not answer else answer in ("y", "yes")
-
-
 def suggest_audience() -> str:
     """A name scoped to this machine and account.
 

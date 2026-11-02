@@ -98,6 +98,16 @@ Hello, or your security key). The passkey's public key is recorded in the signer
 
 
 def sign_page(token: str, payload: dict) -> str:
+    """The terms the signer approves: the canonical text, the header fields, what
+    the CLI will do with the signed block, and the confirmation code.
+
+    This page is where approval happens. The terminal prints the same terms, but
+    it does not ask: it cannot, wherever the command was started by something
+    that owns the keyboard and leaves no controlling terminal behind -- an agent
+    harness's shell escape, for one. So everything that carries authority has to
+    be here, the destination included, and declining is closing the page or
+    dismissing the authenticator.
+    """
     rows = [("Signer", payload["signer"]), ("Key", payload["kid"]), ("Expires", payload["exp"] or "never (valid until removed)"),
             ("Audience", payload.get("aud") or "any"), ("Nonce", payload["jti"])]
     dl = "".join(f"<dt>{html.escape(k)}</dt><dd>{html.escape(v)}</dd>" for k, v in rows)
