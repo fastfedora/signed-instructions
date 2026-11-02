@@ -726,3 +726,30 @@ def test_the_confirmation_code_is_printed_for_a_passkey(sib_home, monkeypatch):
     line = next(l for l in se.splitlines() if "confirmation code" in l)
     code = line.split("confirmation code ")[1].split(",")[0]
     assert len(code) == 6 and code.isdigit() and "the sign page must show" in line
+
+
+def test_the_code_the_terminal_prints_is_the_code_the_page_shows(sib_home, monkeypatch):
+    """The whole value of the code is that the two sides agree, so this
+    recomputes the page's side from the block the command produced. A silent
+    divergence here would leave a control that always looks wrong and so gets
+    ignored."""
+    from tests.fake_authenticator import FakeAuthenticator, enroll_fake
+    from sib.canon import canonicalize
+    from sib.envelope import extract
+    from sib.header import Header
+    from sib import keys_webauthn
+    import sib.webauthn_app
+    auth = FakeAuthenticator()
+    reg = Registry()
+    enroll_fake(reg, auth, "alice@example.com", "alice@example.com#passkey-1")
+    reg.save()
+    monkeypatch.setattr(sib.webauthn_app, "sign_in_browser", _fake_sign_in_browser(auth))
+    rc, so, se = run(["sign", "-y", "--out", "-", "--signer", "alice@example.com",
+                      "--audience", "acme/dev-agent", "You may deploy to staging."])
+    assert rc == 0, se
+    printed = next(l for l in se.splitlines() if "confirmation code" in l).split("confirmation code ")[1].split(",")[0]
+
+    block = extract(so)[0]
+    h = Header.decode(block.compact.split("..")[0])
+    challenge = keys_webauthn.challenge(h.signing_header().encode(), canonicalize(h.canon, block.text))
+    assert keys_webauthn.code_for_challenge(challenge) == printed
