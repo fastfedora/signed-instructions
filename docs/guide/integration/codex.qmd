@@ -166,8 +166,9 @@ Opening http://localhost:7391/sign/HhQk…
 The browser is where you approve. The page shows the same terms — the text, the signer, the key,
 the expiry, the audience, where the block will go — and the confirmation code, which must match
 the one above. Touch the authenticator to sign, or press Cancel; nothing is written unless an
-assertion comes back verified. Then tell Codex to re-read `AGENTS.md`, and the reviewer will find
-a verified span the next time it is asked to approve something.
+assertion comes back verified. The reviewer reads `AGENTS.md` from disk when it is next asked to
+approve something, so the block counts from the moment it is written; re-reading the file in Codex
+is only so the agent knows the instruction is there to act on.
 
 ::: {.callout-note}
 The ceremony needs to bind `http://localhost:7391`, which agent sandboxes normally forbid. If your
