@@ -42,7 +42,9 @@ Instruction
   verifier canonicalizes it and checks the signature over the result.
 
 Clear metadata lines
-: `Signer`, `Expires` and `Audience`, followed by a blank line. They exist so a person reading a
+: `Signer`, then `Expires` and `Audience` when the header carries them, followed by a blank line.
+  A clear line claiming a term the signed header does not have fails as `metadata_mismatch`, the
+  same as one that disagrees. They exist so a person reading a
   file or a chat message can see who signed and until when without decoding anything. They are
   convenience copies of values in the signed header; the verifier compares them with the header
   and reports `metadata_mismatch` if someone has edited them.
@@ -98,9 +100,10 @@ header unchanged. Two fields are SIB's own.
 | `b64`, `crit` | The payload is unencoded and detached; `crit` makes `b64` mandatory to understand. | RFC 7797 |
 | `canon` | The [canonicalization](canonicalization.qmd) rule applied to the instruction before signing. | SIB |
 | `iss` | Issuer: the signer's stable identifier. | JWT |
-| `iat`, `exp` | Issued at and expires at, RFC 3339 in UTC. | JWT |
+| `iat` | Issued at, RFC 3339 in UTC. | JWT |
+| `exp` | Expires at, RFC 3339 in UTC. Optional, as in RFC 7519: a block with no `exp` does not expire and is valid until removed from the file. | JWT |
 | `jti` | Unique identifier for this block; the replay nonce. | JWT |
-| `aud` | Audience: the deployment or harness that may honor the block. | JWT |
+| `aud` | Audience: the authorization context within which the block may be honored. | JWT |
 | `mode` | `dev` or `enforced`. A dev block confers nothing in enforced mode. | SIB |
 
 `canon` is deliberately not listed in `crit`. A generic JWS library must be able to accept the

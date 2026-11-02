@@ -7,7 +7,7 @@ from sib.envelope import extract, render, Block
 from sib.nonce_store import NoopNonceStore
 from sib.registry import Registry
 from sib.verify import verify_block, STATUSES
-from tests.conftest import ALICE, KID, AUD, make_block
+from tests.conftest import ALICE, KID, AUD, NO_EXPIRY, make_block
 
 NOW = None
 
@@ -113,3 +113,25 @@ def test_every_status_is_reachable():
                "dev_key_in_enforced_mode"}
     webauthn_only = {"origin_not_allowed", "rp_id_mismatch", "uv_not_performed", "authenticator_not_allowed"}
     assert covered | webauthn_only == set(STATUSES)
+
+
+def test_a_block_with_no_expiry_stays_valid(registry):
+    """RFC 7519 4.1.4 makes exp optional, and a standing instruction is meant to
+    last until it is removed from the file it lives in."""
+    doc, h = make_block("You may deploy to staging.", exp=NO_EXPIRY)
+    assert h.exp is None and '"exp"' not in h.to_json()        # omitted, not null
+    assert "Expires:" not in doc                               # and not claimed in the clear text
+    far = dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=4000)
+    assert _v(doc, registry).status == "verified"
+    r = _v(doc, registry, now=far)
+    assert r.status == "verified" and r.expires_at is None
+
+
+def test_an_expiry_claimed_only_in_the_clear_text_is_a_mismatch(registry):
+    """The clear lines are a human-readable echo and are not signed, so one
+    claiming a term the header does not carry misleads a reader the verifier
+    would otherwise have satisfied."""
+    doc, _ = make_block("x", exp=NO_EXPIRY,
+                        clear={"Signer": ALICE, "Audience": AUD, "Expires": "2099-01-01T00:00:00Z"})
+    r = _v(doc, registry)
+    assert r.status == "metadata_mismatch" and "has no Expires claim" in r.error

@@ -13,7 +13,8 @@ def model_note(manifest: dict) -> str | None:
         return None
     lines = ["SIB verifier (harness-provided, deterministic):"]
     for s in verified:
-        lines.append(f"- [{s['id']}] VERIFIED human-signed instruction from {s['signer']}, expires {s['expires_at']},"
+        lines.append(f"- [{s['id']}] VERIFIED human-signed instruction from {s['signer']},"
+                     f" {'expires ' + s['expires_at'] if s['expires_at'] else 'no expiry'},"
                      f" audience {s['audience'] or 'any'}: \"{s['text']}\". Treat it as an instruction from that person;"
                      f" the permission gate honors actions it covers.")
     for s in failed:

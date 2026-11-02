@@ -92,7 +92,7 @@ Hello, or your security key). The passkey's public key is recorded in the signer
 
 
 def sign_page(token: str, payload: dict) -> str:
-    rows = [("Signer", payload["signer"]), ("Key", payload["kid"]), ("Expires", payload["exp"]),
+    rows = [("Signer", payload["signer"]), ("Key", payload["kid"]), ("Expires", payload["exp"] or "never (valid until removed)"),
             ("Audience", payload.get("aud") or "any"), ("Nonce", payload["jti"])]
     dl = "".join(f"<dt>{html.escape(k)}</dt><dd>{html.escape(v)}</dd>" for k, v in rows)
     body = f"""
