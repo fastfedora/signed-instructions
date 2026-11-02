@@ -21,6 +21,9 @@ _STYLE = """
   #status { margin-top: 1rem; min-height: 1.5rem; }
   .ok { color: #137333; } .err { color: #b3261e; } .warn { color: #8a5a00; }
   .note { color: #555; font-size: 0.9rem; }
+  .action { margin: 1rem 0 0.25rem; }
+  .action strong { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+                   word-break: break-all; }
   .code { font-size: 1.1rem; margin: 1rem 0 0.25rem; }
   .code strong { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
                  letter-spacing: 0.2em; font-size: 1.4rem; }
@@ -98,10 +101,15 @@ def sign_page(token: str, payload: dict) -> str:
     rows = [("Signer", payload["signer"]), ("Key", payload["kid"]), ("Expires", payload["exp"] or "never (valid until removed)"),
             ("Audience", payload.get("aud") or "any"), ("Nonce", payload["jti"])]
     dl = "".join(f"<dt>{html.escape(k)}</dt><dd>{html.escape(v)}</dd>" for k, v in rows)
+    action = (f"""
+<p class="action">On signing: <strong>{html.escape(payload["action"])}</strong></p>
+<p class="note">What a block authorizes depends on the file an agent reads it from, so this is part of
+what you are approving. Close this page if it is not where you meant the instruction to go.</p>"""
+              if payload.get("action") else "")
     body = f"""
 <h1>Sign this instruction</h1>
 <pre>{html.escape(payload["ctext"])}</pre>
-<dl>{dl}</dl>
+<dl>{dl}</dl>{action}
 <p class="code">Confirmation code <strong>{html.escape(payload["code"])}</strong></p>
 <p class="note">Your terminal printed this code when you ran <code>sib sign</code>. If it does not
 match, close this page: the ceremony you are being asked to approve is not the one you started.</p>

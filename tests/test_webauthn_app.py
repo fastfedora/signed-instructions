@@ -84,10 +84,12 @@ def test_enroll_refusal_and_wrong_kind():
 
 # ---- sign ----
 
-def _sign_request(state, auth, reg, text="You may deploy to staging with scripts/deploy.sh staging."):
+def _sign_request(state, auth, reg, text="You may deploy to staging with scripts/deploy.sh staging.",
+                  action=""):
     key = reg.lookup(PKID)[1]
     h = _header()
-    payload = {"header": h, "ctext": text, "key": key, "allowed_aaguids": reg.allowed_aaguids()}
+    payload = {"header": h, "ctext": text, "key": key, "allowed_aaguids": reg.allowed_aaguids(),
+               "action": action}
     return state.add("sign", payload, sign_challenge(h, text)), h
 
 
@@ -276,6 +278,31 @@ def test_the_sign_page_shows_the_confirmation_code(sib_home):
     assert len(code) == 6 and code.isdigit()
     assert code in page and "Confirmation code" in page
     assert "not the one you started" in page          # and says what a mismatch means
+
+
+def test_the_sign_page_shows_what_will_be_done_with_the_block(sib_home):
+    """The signer may be reading this page and nothing else: under -y there is no
+    terminal in the ceremony, so the destination has to be here. The same words
+    appended to a repository's AGENTS.md and printed to stdout authorize
+    different things."""
+    auth = FakeAuthenticator()
+    reg = Registry()
+    enroll_fake(reg, auth, ALICE, PKID)
+    state, c = _client()
+    token, h = _sign_request(state, auth, reg, action="appending to /work/repo/AGENTS.md")
+    page = c.get(f"/sign/{token}").text
+    assert "On signing:" in page and "appending to /work/repo/AGENTS.md" in page
+    assert "depends on the file an agent reads it from" in page
+
+
+def test_an_action_the_signer_should_not_trust_cannot_inject_markup(sib_home):
+    auth = FakeAuthenticator()
+    reg = Registry()
+    enroll_fake(reg, auth, ALICE, PKID)
+    state, c = _client()
+    token, _ = _sign_request(state, auth, reg, action="appending to <script>alert(1)</script>")
+    page = c.get(f"/sign/{token}").text
+    assert "<script>alert(1)</script>" not in page and "&lt;script&gt;" in page
 
 
 def test_the_code_follows_the_text_that_is_signed(sib_home):

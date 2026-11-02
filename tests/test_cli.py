@@ -85,8 +85,11 @@ from sib import keys_dev, keys_webauthn
 from tests.fake_authenticator import FakeAuthenticator, enroll_fake, ORIGIN
 
 
-def _fake_sign_in_browser(auth):
-    def fake(header, ctext, key, allowed, timeout=180, open_browser=True, browser=None):
+def _fake_sign_in_browser(auth, seen=None):
+    def fake(header, ctext, key, allowed, timeout=180, open_browser=True, browser=None, action="",
+             code_in_terminal=True):
+        if seen is not None:
+            seen.update(action=action, code_in_terminal=code_in_terminal, ctext=ctext)
         from dataclasses import replace
         a = auth.get(keys_webauthn.challenge(header.encode(), ctext))
         full = replace(header, credentialId=a["rawId"], authenticatorData=a["response"]["authenticatorData"],
@@ -694,6 +697,48 @@ def test_the_confirmation_code_is_printed_for_a_passkey(sib_home, monkeypatch):
     line = next(l for l in se.splitlines() if "confirmation code" in l)
     code = line.split("confirmation code ")[1].split(",")[0]
     assert len(code) == 6 and code.isdigit() and "the sign page must show" in line
+
+
+def test_the_page_is_told_where_the_block_will_go(sib_home, monkeypatch):
+    """The destination is a term the signer approves, so it has to reach the page
+    they approve on. Declining is theirs to do there: close the page, or dismiss
+    the authenticator."""
+    from tests.fake_authenticator import FakeAuthenticator, enroll_fake
+    import sib.webauthn_app
+    auth = FakeAuthenticator()
+    reg = Registry()
+    enroll_fake(reg, auth, "alice@example.com", "alice@example.com#passkey-1")
+    reg.save()
+    seen = {}
+    monkeypatch.setattr(sib.webauthn_app, "sign_in_browser", _fake_sign_in_browser(auth, seen))
+    agents = sib_home / "AGENTS.md"
+    agents.write_text("# Project\n")
+    rc, so, se = run(["sign", "-y", "--append", str(agents), "--signer", "alice@example.com",
+                      "--audience", "acme/dev-agent", "You may deploy to staging."])
+    assert rc == 0, se
+    assert seen["action"] == f"appending to {agents}"
+    assert "You may deploy to staging." in agents.read_text()
+
+
+def test_the_destination_shown_to_the_signer_is_the_one_used(sib_home, monkeypatch):
+    """One function answers both, so the page cannot promise one file while the
+    CLI appends to another."""
+    from tests.fake_authenticator import FakeAuthenticator, enroll_fake
+    import sib.webauthn_app
+    auth = FakeAuthenticator()
+    reg = Registry()
+    enroll_fake(reg, auth, "alice@example.com", "alice@example.com#passkey-1")
+    reg.save()
+    seen = {}
+    monkeypatch.setattr(sib.webauthn_app, "sign_in_browser", _fake_sign_in_browser(auth, seen))
+    rc, so, se = run(["sign", "-y", "--out", "-", "--signer", "alice@example.com",
+                      "--audience", "acme/dev-agent", "x"])
+    assert rc == 0 and seen["action"] == "printing the block to stdout"
+    assert "  printing the block to stdout" in se       # and the terminal says the same
+    out = sib_home / "block.txt"
+    rc, so, se = run(["sign", "-y", "--out", str(out), "--signer", "alice@example.com",
+                      "--audience", "acme/dev-agent", "x"])
+    assert rc == 0 and seen["action"] == f"writing {out}" and f"  writing {out}" in se
 
 
 def test_the_code_the_terminal_prints_is_the_code_the_page_shows(sib_home, monkeypatch):

@@ -138,10 +138,16 @@ def enroll_in_browser(signer: str, existing_credential_ids: list[str], allowed_a
 
 
 def sign_in_browser(header, ctext: str, key: dict, allowed_aaguids: dict, timeout: float = 180,
-                    open_browser: bool = True, browser: str | None = None) -> dict:
+                    open_browser: bool = True, browser: str | None = None, action: str = "") -> dict:
     """`{"header": full header, "signature": b64url, "status": ..., "error": ..., "uvm": ...}`
-    for the signing header `header` over the canonical text `ctext`."""
-    return run_in_browser("sign", {"header": header, "ctext": ctext, "key": key, "allowed_aaguids": allowed_aaguids},
+    for the signing header `header` over the canonical text `ctext`.
+
+    `action` is what the CLI will do with the block once it is signed, shown on
+    the page alongside the text: the page is where the signer approves, so every
+    term they are approving has to reach it.
+    """
+    return run_in_browser("sign", {"header": header, "ctext": ctext, "key": key, "allowed_aaguids": allowed_aaguids,
+                                   "action": action},
                           challenge=sign_challenge(header, ctext), timeout=timeout, open_browser=open_browser,
                           browser=browser)
 

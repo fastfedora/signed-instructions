@@ -77,6 +77,21 @@ def resolve_destination(a) -> tuple[Path | None, bool]:
     return (found, True) if found else (None, False)
 
 
+def describe_destination(dest: Path | None, append: bool) -> str:
+    """What `sib sign` will do with the block, as one phrase.
+
+    The terminal and the sign page show the same string, from here. A signature
+    authorizes an action, not only a text: the same words appended to a
+    repository's AGENTS.md and printed to stdout grant different things, because
+    what a block authorizes is decided by the file an agent reads it from. So
+    where it lands belongs with the terms the signer approves, and the signer
+    may be reading them in the browser rather than in a terminal.
+    """
+    if dest is None:
+        return "printing the block to stdout"
+    return f"{'appending to' if append else 'writing'} {dest}"
+
+
 def refuse_a_software_key_beside_a_passkey(reg: Registry, signer: str) -> None:
     """A software key enrolled for someone who already holds a passkey can only
     weaken what a signature from that person means.
@@ -250,8 +265,8 @@ def cmd_sign(a):
           f"canon={a.canon} mode={mode}\n"
           f"  audience={audience or 'any'}" + (f" (from {aud_source})" if audience else ""),
           file=sys.stderr)
-    print(f"  {'appending to' if append else 'writing'} {dest}" if dest else "  printing the block to stdout",
-          file=sys.stderr)
+    action = describe_destination(dest, append)
+    print("  " + action, file=sys.stderr)
     # The page the signer approves on is served from http://localhost, an origin
     # any local process can take, and WebAuthn shows the authenticator's prompt
     # without the text. The code ties this terminal to that page.
@@ -271,7 +286,7 @@ def cmd_sign(a):
         t0 = time.time()
         try:
             res = sign_in_browser(h, ctext, key, reg.allowed_aaguids(), timeout=a.timeout,
-                                  open_browser=not a.no_browser, browser=a.browser)
+                                  open_browser=not a.no_browser, browser=a.browser, action=action)
         except BrowserFlowError as e:
             raise SystemExit(f"signing failed: {e}")
         if res["status"] != "verified":
