@@ -73,6 +73,8 @@ website:
           contents:
             - text: Claude Code
               file: guide/integration/claude-code.qmd
+            - text: Codex
+              file: guide/integration/codex.qmd
             - text: Permission Classifier
               file: guide/integration/classifier.qmd
             - text: Other Harnesses
@@ -140,8 +142,6 @@ website:
           contents:
             - text: Attack Catalog
               file: project/attacks.qmd
-            - text: SIB in Codex
-              file: project/codex-integration.qmd
             - text: Experiment Results
               file: project/results.qmd
      - title: Specification

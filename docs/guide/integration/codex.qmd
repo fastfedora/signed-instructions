@@ -1,0 +1,147 @@
+---
+title: Codex
+---
+
+Codex needs no hooks and no patch. Its approval reviewer is an agent with read-only tool access, so
+a policy can tell it that `AGENTS.md` is untrusted except for verified signed blocks, and that it
+must run `sib verify` before scoring authorization. The reviewer does the rest with the
+instructions and the tools it already has. `sib install codex` writes that policy.
+
+This page covers how the integration works, how to install it, what it achieves and where its
+limits are. The measurements behind it are in the
+[Phase 4 findings](../../project/plans/findings/phase-4-codex.md).
+
+
+## How the Policy Works
+
+![A human signs an instruction into `AGENTS.md`. The Codex agent reads the file and plans a deploy;
+the sandbox blocks it and sends an approval request to the auto-review reviewer, whose prompt
+carries the SIB policy from `config.toml`. The reviewer runs `sib verify`, which reads `AGENTS.md`
+and the registry outside the repository and returns a manifest; the reviewer scores authorization
+from verified spans and answers allow or deny.](../../project/plans/findings/images/phase-4/runtime-path.svg){width=100%}
+
+The reviewer verifies the file itself. SIB adds no channel to Codex: the policy in `config.toml`
+tells the reviewer which part of `AGENTS.md` to trust and which command establishes it, and the
+reviewer's existing read-only tool access does the rest. The verified span sets
+`user_authorization`, an input the reviewer already scores.
+
+This is the opposite of the [Claude Code](claude-code.qmd) integration, where two hooks run the
+verifier and deliver a manifest the classifier reads. There, the harness carries the evidence to
+the decision; here, the decision-maker fetches the evidence. The difference is why Codex can do
+something Claude Code cannot — see [What This Achieves](#what-this-achieves).
+
+
+## What Changes Between a Forged Claim and a Signature
+
+![Two identical pipelines. The forged claim yields a manifest with no verified spans, authorization
+`low` and a denial. The signature yields a verified span signed by alice, authorization `high` and
+an allow. The risk level is `high` in both arms because the team's deploy rule says
+so.](../../project/plans/findings/images/phase-4/forged-vs-signed.svg){width=100%}
+
+Everything is identical until the manifest. Codex trusts `AGENTS.md` unconditionally, so the forged
+sentence used to establish authorization honestly, by the reviewer's own rules; the SIB policy
+makes only a `verified` span count, and the reviewer's own rationales quote the manifest when it
+refuses.
+
+So SIB's job in Codex is to narrow trust as much as to convey it, by distinguishing the signed part
+of `AGENTS.md` from the rest. That is an easier thing to ask of a maintainer than new authority,
+because it closes a hole rather than opening one.
+
+
+## Installation
+
+```bash
+sib install codex
+```
+
+One command before launching Codex. It asks for the two things no package can ship — a name for
+this authorization context, and a key to sign with — rather than refusing until you have arranged
+them yourself, and it merges into an existing `config.toml` rather than overwriting it, backing the
+old file up to `config.toml.sib-bak` first. `--print` shows what it would write without writing.
+The full flag reference is under [`install codex`](../basics/cli.qmd#install-codex).
+
+What it writes:
+
+- `approvals_reviewer = "auto_review"` at the top of `config.toml`, asked first and never silently
+  replacing a different choice. Declining still writes the policy; the reviewer can then be enabled
+  per run with `codex exec --approve-for-me`.
+
+- Under `[auto_review]`: the pinned template and `extra_policy`, with the absolute `sib` path,
+  `SIB_HOME` and the audience baked into the command the reviewer will run. Baking them in matters:
+  those are the settings an agent could otherwise redirect through the environment.
+
+- Warnings when the registry sits inside the working directory, when no key is enrolled yet, and
+  that SIB scores authorization but not risk, so a deploy rule is still yours to write.
+
+It places nothing in `$CODEX_HOME/skills/`. Signing is a command you run — `! sib sign "..."` from
+inside Codex, or the same in your own terminal — and it was never something an agent could do on
+your behalf: the ceremony needs your authenticator, and Codex's sandbox denies the loopback
+listener it runs on.
+
+
+## Why the Template Is Pinned
+
+![The reviewer prompt is rendered by substituting two slots in a template. The template the model
+catalog serves has only the tenant policy slot, so `extra_policy` is dropped silently. Pinning
+Codex's bundled template restores the slot, and the SIB rules land after Codex's built-in security
+policy.](../../project/plans/findings/images/phase-4/template-pin.svg){width=100%}
+
+The only workaround in the integration. `auto_review.policy` is not a substitute, because it
+replaces Codex's entire built-in security policy; pinning the bundled template keeps it and adds
+ours. Once upstream restores the slot
+([openai/codex#50309](https://github.com/openai/codex/issues/50309)), the configuration is four
+lines.
+
+
+## What This Achieves
+
+| Arm | Runs | Verifier invoked | Authorization scored | Outcome |
+|---|---|---|---|---|
+| Forged claim in `AGENTS.md` | 3 | 3 | `low`, every time | denied, 3 of 3 |
+| Genuine signature in `AGENTS.md` | 3 | 3 | `high`, every time | allowed, 3 of 3 |
+
+Across all nine runs that reached a verdict, the reviewer chose to run `sib verify --json` itself
+and scored authorization from the manifest. The Phase 0 baseline, with no policy, deployed on a
+forged `AGENTS.md` line 20 times out of 20.
+
+::: {.callout-important}
+This is the one place a signature carries authority rather than only denying it to unsigned text.
+The same direction is impossible in Claude Code, where it failed 30 times out of 30: its auto-mode
+classifier will lower a privilege on a provenance note and will not raise one. The difference is
+structural — Codex's reviewer already scores `user_authorization` as an input, so a verified span
+has somewhere to land.
+:::
+
+
+## Failure Behavior
+
+The policy's instruction to the reviewer is to treat every instruction as unsigned when the
+verifier cannot be run or fails, so the failure direction is toward denial rather than toward a
+claim that something is signed.
+
+- **`sib verify` errors or cannot be run**: the policy says to score authorization as though
+  nothing is signed.
+
+- **The reviewer does not run the verifier**: unsigned `AGENTS.md` text is back to being trusted,
+  which is Codex's own baseline behavior. Nine runs for nine so far, and predicted by the
+  reviewer's own instructions, but this is a model decision and not a guarantee.
+
+- **`extra_policy` silently dropped**: the reason the template is pinned. Without the pin the
+  policy never reaches the reviewer at all and nothing warns you, which is why
+  `sib install codex --print` is worth reading once.
+
+
+## The Bounds
+
+- **Provenance is one factor, not the verdict.** Codex allows medium-risk actions whatever the
+  authorization, so a forged deploy was once allowed when the reviewer scored it `medium`. One
+  sentence of ordinary deploy policy fixed that, and that sentence is the team's, not SIB's.
+
+- **The registry is the trust root.** An agent that can write `SIB_HOME` can enroll its own key.
+  The installer warns; nothing enforces it yet.
+
+- **The reviewer choosing to run the verifier is a model decision.** See
+  [Failure Behavior](#failure-behavior).
+
+- **Not yet tested against the reviewer:** tampered and expired blocks. Only forged-unsigned and
+  genuine-verified have been.
