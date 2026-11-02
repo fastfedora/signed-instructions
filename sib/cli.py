@@ -17,6 +17,7 @@ from .envelope import render, extract
 from .header import Header, signing_input, format_time
 from .manifest import build_manifest, render_classifier_note, to_json
 from .nonce_store import NoopNonceStore
+from .first_run import git_signer
 from .registry import Registry, resolve_audience, default_mode
 from .verify import verify_block, clear_lines
 
@@ -27,6 +28,53 @@ def parse_duration(s: str) -> dt.timedelta:
         raise SystemExit(f"bad duration {s!r}; use e.g. 30m, 2h, 1d")
     n, unit = int(m.group(1)), m.group(2)
     return dt.timedelta(**{{"s": "seconds", "m": "minutes", "h": "hours", "d": "days"}[unit]: n})
+
+
+INSTRUCTION_FILES = ("AGENTS.md", "CLAUDE.md")
+
+
+def find_instructions_file(start: Path | None = None) -> Path | None:
+    """The nearest agent instructions file at or above `start`, or None.
+
+    The nearest directory wins, and `AGENTS.md` wins over `CLAUDE.md` within
+    one directory: a block belongs in the file the harness reading this
+    checkout will actually load, and `AGENTS.md` is the one Codex reads.
+
+    The walk stops at the repository root, or at the home directory outside a
+    repository. Standing authorization is scoped to the project it was typed
+    in; a block that drifted up into `~/CLAUDE.md` would authorize every
+    checkout on the machine, which is not what anyone asked for by signing in
+    one of them.
+    """
+    d = (start or Path.cwd()).resolve()
+    home = Path.home().resolve()
+    for p in (d, *d.parents):
+        for name in INSTRUCTION_FILES:
+            f = p / name
+            if f.is_file():
+                return f
+        if (p / ".git").exists() or p == home:
+            break
+    return None
+
+
+def resolve_destination(a) -> tuple[Path | None, bool]:
+    """Where the block goes, as `(path, append)`; `(None, False)` is stdout.
+
+    Resolved before the ceremony, so an unwritable path fails before the user
+    is asked for a fingerprint rather than after.
+    """
+    if a.out and a.append:
+        raise SystemExit("give --out or --append, not both")
+    if a.append:
+        return Path(a.append).expanduser(), True
+    if a.out:
+        return (None, False) if a.out == "-" else (Path(a.out).expanduser(), False)
+    found = find_instructions_file()
+    # Nothing found is not an error, and not a reason to create a file: without
+    # instructions to append to there is nothing to be standing authorization
+    # for, so the block goes to stdout and the caller decides.
+    return (found, True) if found else (None, False)
 
 
 def default_kid(signer: str) -> str:
@@ -54,7 +102,18 @@ def resolve_signer_and_kid(reg: Registry, signer: str | None, kid: str | None, d
             raise SystemExit(f"kid {kid!r} is a {found[1].get('alg')} key; --dev signs with a dev key")
         return found[0], kid
     if not signer:
-        raise SystemExit("give --kid or --signer")
+        # Nobody named: fall back to the identity this machine commits as, but only when
+        # a key is enrolled for it. Guessing a signer with no key would turn a missing
+        # flag into an unknown_signer block, discovered far from the cause.
+        guess = git_signer()
+        if guess and any(not k.get("revoked") for k in reg.signers.get(guess, [])):
+            print(f"signing as {guess} (git config user.email)", file=sys.stderr)
+            signer = guess
+        elif guess:
+            raise SystemExit(f"give --kid or --signer: nothing is enrolled for {guess!r}, which is "
+                             f"this machine's git identity")
+        else:
+            raise SystemExit("give --kid or --signer")
     keys = [k for k in reg.signers.get(signer, []) if not k.get("revoked")]
     if dev:
         keys = [k for k in keys if k.get("alg") == "EdDSA"]
@@ -128,19 +187,27 @@ def cmd_enroll(a):
 
 
 def cmd_sign(a):
-    if a.text is not None and a.file:
-        raise SystemExit("give --text or --file, not both")
-    if a.text is not None:
-        text = a.text
-    else:
-        text = Path(a.file).read_text() if a.file and a.file != "-" else sys.stdin.read()
+    if len([s for s in (a.text, a.text_flag, a.file) if s]) > 1:
+        raise SystemExit("give the instruction once: as an argument, with --text, or with --file")
+    text = a.text if a.text is not None else a.text_flag
+    if text is None:
+        if a.file:
+            text = Path(a.file).read_text() if a.file != "-" else sys.stdin.read()
+        elif sys.stdin.isatty():
+            # Reading a terminal here would hang with no prompt and no hint.
+            raise SystemExit('nothing to sign: give the instruction as an argument, as\n'
+                             '  sib sign "You may deploy the current main branch to staging."\n'
+                             'or pipe it in on stdin.')
+        else:
+            text = sys.stdin.read()
     text = text.strip("\n")
     if not text.strip():
         raise SystemExit("nothing to sign")
+    dest, append = resolve_destination(a)
     if a.canon not in RULES:
         raise SystemExit(f"unknown canonicalization {a.canon!r}; known: {', '.join(RULES)}")
     now = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
-    exp = now + parse_duration(a.expires)
+    exp = now + parse_duration(a.expires) if a.expires else None
     reg = Registry()
     signer, kid = resolve_signer_and_kid(reg, a.signer, a.kid, dev=a.dev)
     key = reg.lookup(kid)[1]
@@ -150,14 +217,17 @@ def cmd_sign(a):
         raise SystemExit("--audience is required for a passkey-signed block: enforced mode refuses a block with no audience")
     alg, mode = (keys_webauthn.ALG, "enforced") if webauthn else ("EdDSA", "dev")
     ctext = canonicalize(a.canon, text)
-    h = Header(alg=alg, kid=kid, canon=a.canon, iss=signer, iat=format_time(now), exp=format_time(exp),
+    h = Header(alg=alg, kid=kid, canon=a.canon, iss=signer, iat=format_time(now), exp=format_time(exp) if exp else None,
                jti=b64u_encode(secrets.token_bytes(12)), mode=mode, aud=audience)
     hb = h.encode()
     # What-you-see-is-what-you-sign: show the exact canonical text and terms before signing.
     print("About to sign (canonical form):", file=sys.stderr)
     print("  " + ctext, file=sys.stderr)
-    print(f"  signer={signer} kid={kid} expires={h.exp} canon={a.canon} mode={mode}\n"
+    print(f"  signer={signer} kid={kid} expires={h.exp or 'never, valid until removed'} "
+          f"canon={a.canon} mode={mode}\n"
           f"  audience={audience or 'any'}" + (f" (from {aud_source})" if audience else ""),
+          file=sys.stderr)
+    print(f"  {'appending to' if append else 'writing'} {dest}" if dest else "  printing the block to stdout",
           file=sys.stderr)
     if webauthn:
         from .webauthn_app import sign_in_browser, BrowserFlowError
@@ -175,11 +245,18 @@ def cmd_sign(a):
     else:
         compact = f"{hb}..{keys_dev.sign(kid, signing_input(hb, ctext))}"
     block = render(text, compact, clear_lines(h))
-    if a.out:
-        Path(a.out).write_text(block + "\n")
-        print(f"wrote {a.out}", file=sys.stderr)
-    else:
+    if dest is None:
         print(block)
+    elif append:
+        # One blank line before the block, whatever state the file was left in.
+        prior = dest.read_text() if dest.exists() else ""
+        prefix = "\n" if not prior or prior.endswith("\n") else "\n\n"
+        with dest.open("a") as f:
+            f.write(prefix + block + "\n")
+        print(f"appended to {dest}", file=sys.stderr)
+    else:
+        dest.write_text(block + "\n")
+        print(f"wrote {dest}", file=sys.stderr)
 
 
 def _verify_document(doc: str, audience: str | None, mode: str, reg: Registry):
@@ -206,7 +283,7 @@ def cmd_verify(a):
         for s in m["spans"]:
             tag = "VERIFIED" if s["status"] == "verified" else s["status"].upper()
             who = f" {s['signer']}" if s.get("signer") else ""
-            print(f"[{s['id']}] {tag}{who} exp={s.get('expires_at')} aud={s.get('audience')}"
+            print(f"[{s['id']}] {tag}{who} exp={s.get('expires_at') or 'never'} aud={s.get('audience')}"
                   + (f"\n     error: {s['error']}" if s.get("error") else ""))
             if s.get("text"):
                 print(f"     text: {s['text']}")
@@ -299,11 +376,16 @@ def main(argv=None):
     s = sub.add_parser("sign", help="clearsign an instruction; give --kid, or --signer when they hold one key")
     s.add_argument("--signer", help="signer id (derived from --kid through the registry when omitted)")
     s.add_argument("--kid", help="key identifier (derived from --signer when the signer has one enrolled key)")
-    s.add_argument("--expires", default="2h"); s.add_argument("--audience")
+    s.add_argument("--expires", help="validity window from now, as 30m, 2h or 1d "
+                                      "(default: none, valid until the block is removed)")
+    s.add_argument("--audience")
     s.add_argument("--canon", default="text/1")
-    s.add_argument("--text", help="the instruction to sign, given directly")
-    s.add_argument("--file", help="file holding the instruction, or - for stdin (default when --text is absent)")
-    s.add_argument("--out")
+    s.add_argument("text", nargs="?", help="the instruction to sign; read from stdin when absent")
+    s.add_argument("--text", dest="text_flag", metavar="TEXT", help="the instruction to sign, as a flag rather than an argument")
+    s.add_argument("--file", help="file holding the instruction, or - for stdin")
+    s.add_argument("--out", help="write the block to this file, or - for stdout (default: append to the "
+                                 "nearest AGENTS.md or CLAUDE.md, else stdout)")
+    s.add_argument("--append", help="append the block to this file instead of searching for one")
     s.add_argument("--dev", action="store_true", help="sign with a dev key even when a passkey is enrolled")
     s.add_argument("--timeout", type=float, default=180, help="seconds to wait for the browser")
     s.add_argument("--no-browser", action="store_true", help="print the page URL instead of opening a browser")

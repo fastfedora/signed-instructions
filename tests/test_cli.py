@@ -48,13 +48,15 @@ def test_keygen_needs_one_identifier(sib_home):
 
 def test_sign_with_signer_only(sib_home):
     run(["keygen", "--signer", "alice@example.com", "--enroll"])
-    rc, out, err = run(["sign", "--signer", "alice@example.com", "--file", "-"], stdin="Deploy to staging.")
+    rc, out, err = run(["sign", "--signer", "alice@example.com", "--out", "-", "--file", "-"],
+                       stdin="Deploy to staging.")
     assert rc == 0 and "BEGIN SIB SIGNED INSTRUCTION" in out and "kid=alice@example.com#dev-" in err
 
 
 def test_sign_with_kid_only_derives_signer(sib_home):
     run(["keygen", "--signer", "alice@example.com", "--kid", "alice@example.com#laptop", "--enroll"])
-    rc, out, err = run(["sign", "--kid", "alice@example.com#laptop", "--file", "-"], stdin="Deploy to staging.")
+    rc, out, err = run(["sign", "--kid", "alice@example.com#laptop", "--out", "-", "--file", "-"],
+                       stdin="Deploy to staging.")
     assert rc == 0 and "Signer: alice@example.com" in out
 
 
@@ -71,10 +73,10 @@ def test_sign_refuses_ambiguous_signer_and_mismatch(sib_home):
 
 def test_sign_text_flag(sib_home):
     run(["keygen", "--signer", "alice@example.com", "--enroll"])
-    rc, out, err = run(["sign", "--signer", "alice@example.com", "--text", "Deploy to staging."])
+    rc, out, err = run(["sign", "--signer", "alice@example.com", "--out", "-", "--text", "Deploy to staging."])
     assert rc == 0 and "\nDeploy to staging.\n-----BEGIN SIB SIGNATURE-----" in out
     rc, out, err = run(["sign", "--signer", "alice@example.com", "--text", "x", "--file", "-"], stdin="y")
-    assert rc != 0 and "not both" in err
+    assert rc != 0 and "give the instruction once" in err
 
 
 # ---- passkeys (Phase 2): the browser flows are answered by the fake authenticator ----
@@ -468,3 +470,161 @@ def test_install_says_nothing_when_a_passkey_is_enrolled(sib_home, monkeypatch, 
     enroll_fake(reg, FakeAuthenticator(), "alice@example.com", "alice@example.com#passkey-1")
     first_run.ensure_key(reg, sib_home)
     assert capsys.readouterr().err == ""
+
+
+def test_sign_falls_back_to_the_git_identity(sib_home, registry, monkeypatch):
+    """With neither --signer nor --kid, sign as whoever this machine commits as —
+    but only when a key is enrolled for them."""
+    from sib import cli
+    monkeypatch.setattr(cli, "git_signer", lambda: "alice@example.com")
+    rc, so, se = run(["sign", "--out", "-", "--text", "You may deploy to staging."])
+    assert rc == 0 and "BEGIN SIB SIGNED INSTRUCTION" in so
+    assert "signing as alice@example.com (git config user.email)" in se
+
+
+def test_sign_says_when_the_git_identity_has_no_key(sib_home, registry, monkeypatch):
+    """Guessing a signer with no key would surface as unknown_signer at verify
+    time, a long way from the missing flag that caused it."""
+    from sib import cli
+    monkeypatch.setattr(cli, "git_signer", lambda: "nobody@example.com")
+    rc, so, se = run(["sign", "--text", "x"])
+    assert rc != 0 and "nothing is enrolled for 'nobody@example.com'" in se and "git identity" in se
+    monkeypatch.setattr(cli, "git_signer", lambda: None)
+    rc, so, se = run(["sign", "--text", "x"])
+    assert rc != 0 and "give --kid or --signer" in se
+
+
+def test_sign_has_no_expiry_by_default(sib_home, registry, monkeypatch):
+    """A standing instruction should last until it is deleted from the file, so
+    the absence of --expires means the absence of the claim."""
+    from sib import cli
+    monkeypatch.setattr(cli, "git_signer", lambda: "alice@example.com")
+    rc, so, se = run(["sign", "--out", "-", "--text", "You may deploy to staging."])
+    assert rc == 0 and "expires=never, valid until removed" in se
+    assert "Expires:" not in so                       # no clear line either
+    rc, so, se = run(["sign", "--out", "-", "--text", "x", "--expires", "2h"])
+    assert rc == 0 and "Expires:" in so               # and one appears when asked for
+
+
+# ---- where the instruction comes from, and where the block goes ----
+
+def test_the_instruction_can_be_an_argument(sib_home, registry, monkeypatch):
+    """`sib sign "..."` with nothing else is the whole command, so the text has
+    to be sayable without a flag."""
+    from sib import cli
+    monkeypatch.setattr(cli, "git_signer", lambda: "alice@example.com")
+    rc, so, se = run(["sign", "--out", "-", "You may deploy to staging."])
+    assert rc == 0 and "\nYou may deploy to staging.\n-----BEGIN SIB SIGNATURE-----" in so
+
+
+def test_the_instruction_can_come_from_stdin_with_no_flag(sib_home, registry, monkeypatch):
+    from sib import cli
+    monkeypatch.setattr(cli, "git_signer", lambda: "alice@example.com")
+    rc, so, se = run(["sign", "--out", "-"], stdin="You may deploy to staging.\n")
+    assert rc == 0 and "\nYou may deploy to staging.\n-----BEGIN SIB SIGNATURE-----" in so
+
+
+def test_two_sources_for_one_instruction_is_refused(sib_home, registry):
+    rc, so, se = run(["sign", "--signer", "alice@example.com", "--out", "-", "first", "--text", "second"])
+    assert rc != 0 and "give the instruction once" in se
+
+
+def test_sign_with_nothing_at_a_terminal_says_what_to_type(sib_home, registry, monkeypatch):
+    """Reading a terminal would hang with no prompt, which looks like a wedged
+    command rather than a missing argument."""
+    from contextlib import redirect_stderr, redirect_stdout
+    monkeypatch.setattr(sys, "stdin", _Tty())
+    err = io.StringIO()
+    with pytest.raises(SystemExit) as e, redirect_stderr(err), redirect_stdout(io.StringIO()):
+        main(["sign", "--out", "-"])
+    assert "nothing to sign" in str(e.value) and "sib sign" in str(e.value)
+
+
+def test_the_block_lands_in_the_nearest_agents_file(sib_home, registry, monkeypatch, tmp_path):
+    """With no --out the block goes where the harness will read it, which is the
+    point of signing it: one command, and the instruction is in force."""
+    from sib import cli
+    monkeypatch.setattr(cli, "git_signer", lambda: "alice@example.com")
+    (tmp_path / ".git").mkdir()
+    agents = tmp_path / "AGENTS.md"
+    agents.write_text("# Project\n\nBuild with make.\n")
+    work = tmp_path / "src" / "deep"
+    work.mkdir(parents=True)
+    monkeypatch.chdir(work)
+    rc, so, se = run(["sign", "You may deploy to staging."])
+    assert rc == 0, se
+    text = agents.read_text()
+    assert text.startswith("# Project\n\nBuild with make.\n")       # nothing overwritten
+    assert "\n\n-----BEGIN SIB SIGNED INSTRUCTION-----" in text      # one blank line before it
+    assert "You may deploy to staging." in text
+    assert f"appended to {agents}" in se and so == ""
+
+
+def test_a_second_block_joins_the_first(sib_home, registry, monkeypatch, tmp_path):
+    from sib import cli
+    monkeypatch.setattr(cli, "git_signer", lambda: "alice@example.com")
+    (tmp_path / ".git").mkdir()
+    agents = tmp_path / "AGENTS.md"
+    agents.write_text("# Project")                      # no trailing newline
+    monkeypatch.chdir(tmp_path)
+    assert run(["sign", "First."])[0] == 0
+    assert run(["sign", "Second."])[0] == 0
+    text = agents.read_text()
+    assert text.startswith("# Project\n\n-----BEGIN")  # a newline of its own was added
+    assert text.count("-----BEGIN SIB SIGNED INSTRUCTION-----") == 2
+
+
+def test_agents_md_wins_over_claude_md_in_one_directory(sib_home, registry, monkeypatch, tmp_path):
+    from sib import cli
+    monkeypatch.setattr(cli, "git_signer", lambda: "alice@example.com")
+    (tmp_path / ".git").mkdir()
+    (tmp_path / "AGENTS.md").write_text("a\n")
+    (tmp_path / "CLAUDE.md").write_text("c\n")
+    monkeypatch.chdir(tmp_path)
+    assert run(["sign", "x"])[0] == 0
+    assert "BEGIN SIB" in (tmp_path / "AGENTS.md").read_text()
+    assert "BEGIN SIB" not in (tmp_path / "CLAUDE.md").read_text()
+
+
+def test_claude_md_is_used_when_there_is_no_agents_md(sib_home, registry, monkeypatch, tmp_path):
+    from sib import cli
+    monkeypatch.setattr(cli, "git_signer", lambda: "alice@example.com")
+    (tmp_path / ".git").mkdir()
+    (tmp_path / "CLAUDE.md").write_text("c\n")
+    monkeypatch.chdir(tmp_path)
+    assert run(["sign", "x"])[0] == 0
+    assert "BEGIN SIB" in (tmp_path / "CLAUDE.md").read_text()
+
+
+def test_the_search_stops_at_the_repository_root(sib_home, registry, monkeypatch, tmp_path):
+    """A block signed in one checkout must not drift up into an instructions
+    file that covers every checkout above it."""
+    from sib import cli
+    monkeypatch.setattr(cli, "git_signer", lambda: "alice@example.com")
+    outer = tmp_path / "AGENTS.md"
+    outer.write_text("everything, everywhere\n")
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    monkeypatch.chdir(repo)
+    rc, so, se = run(["sign", "x"])
+    assert rc == 0 and "BEGIN SIB SIGNED INSTRUCTION" in so    # printed, not appended
+    assert "BEGIN SIB" not in outer.read_text()
+
+
+def test_append_names_the_file_outright(sib_home, registry, monkeypatch, tmp_path):
+    from sib import cli
+    monkeypatch.setattr(cli, "git_signer", lambda: "alice@example.com")
+    target = tmp_path / "notes.md"
+    target.write_text("notes\n")
+    rc, so, se = run(["sign", "--append", str(target), "x"])
+    assert rc == 0 and target.read_text().startswith("notes\n\n-----BEGIN")
+    rc, so, se = run(["sign", "--append", str(target), "--out", "x", "y"])
+    assert rc != 0 and "not both" in se
+
+
+def test_find_instructions_file_is_told_where_to_start(tmp_path):
+    from sib.cli import find_instructions_file
+    (tmp_path / ".git").mkdir()
+    assert find_instructions_file(tmp_path) is None
+    (tmp_path / "AGENTS.md").write_text("x\n")
+    assert find_instructions_file(tmp_path) == tmp_path / "AGENTS.md"

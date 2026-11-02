@@ -23,12 +23,16 @@ sib keygen --signer alice@example.com --enroll
 # Or enroll a passkey (Touch ID, Windows Hello, a security key) through the browser
 sib enroll --signer alice@example.com
 
-# Sign an instruction given on the command line, writing the block to stdout
-sib sign --signer alice@example.com --expires 2h --audience acme/dev-agent \
-  --text "You may deploy the current main branch to staging whenever the test suite passes."
+# Sign an instruction, appending the block to the nearest AGENTS.md or CLAUDE.md
+sib sign "You may deploy the current main branch to staging whenever the test suite passes."
 
-# Sign the contents of a file instead
-sib sign --signer alice@example.com --expires 2h --audience acme/dev-agent --file instruction.txt
+# Or name the signer, the context and an expiry, and write the block elsewhere
+sib sign --signer alice@example.com --expires 2h --audience acme/dev-agent --out block.txt \
+  "You may deploy the current main branch to staging whenever the test suite passes."
+
+# Sign the contents of a file, or anything on standard input
+sib sign --file instruction.txt
+git log -1 --format=%s | sib sign
 
 # Verify every block in a file for a given audience
 sib verify CLAUDE.md --audience acme/dev-agent
@@ -98,40 +102,71 @@ authenticator; see [Biometric Signing](../components/signing.qmd#enrollment).
 
 ### sign
 
-Clearsign an instruction. The command prints the canonical text and the terms before signing, so
-what you see is what you sign. With a passkey it opens the sign page and waits for the
-authenticator; with a dev key it signs at once.
+Clearsign an instruction. The command prints the canonical text, the terms and the destination
+before signing, so what you see is what you sign. With a passkey it opens the sign page and waits
+for the authenticator; with a dev key it signs at once.
+
+The instruction itself is the one positional argument, so the short form is the whole command:
+
+```bash
+sib sign "You may deploy the current main branch to staging."
+```
+
+Given no argument and neither `--text` nor `--file`, the instruction is read from standard input.
+At a terminal, where that would hang with no prompt, the command says what to type instead.
 
 Either identifier is enough: a `--kid` names its signer through the registry, and a `--signer`
 with exactly one enrolled key names that key. A signer's passkeys are preferred over their dev
-keys; with several candidates, the command lists them and asks for `--kid`.
+keys; with several candidates, the command lists them and asks for `--kid`. With neither, the
+command signs as this machine's `git config user.email`, if a key is enrolled for it, and says
+whom it chose — so the usual case needs no identifier at all. A git identity with no enrolled key
+is an error rather than a guess, because guessing would surface later as `unknown_signer`, a long
+way from the cause.
 
 `--signer ID`
-: The signer, written to the `iss` header field. Derived from `--kid` when omitted; checked for
-  agreement when both are given.
+: The signer, written to the `iss` header field. Derived from `--kid` when omitted, then from
+  `git config user.email`; checked for agreement when both it and `--kid` are given.
 
 `--kid ID`
 : The key to sign with. Derived from `--signer` when the signer has one candidate key.
 
 `--expires DURATION`
-: Validity window from now, as `30m`, `2h` or `1d` (default: `2h`).
+: Validity window from now, as `30m`, `2h` or `1d`. Omitted by default, and a block with no `exp`
+  does not expire: it is valid until it is removed from the file it lives in, which is what
+  standing authorization in an instruction file is meant to be. An expiry is still the right choice
+  for a block covering one task, and the only thing that limits a copy taken elsewhere.
 
 `--audience ID`
-: The deployment the block is for. Falls back to `SIB_AUDIENCE` and then the registry's
+: The authorization context the block is for. Falls back to `SIB_AUDIENCE` and then the registry's
   `default_audience`, and the signing preview names which source was used. Optional for a dev key;
   required for a passkey, because a block with no audience is refused in enforced mode.
 
 `--canon RULE`
 : Canonicalization rule (default: `text/1`). See [Canonicalization](../components/canonicalization.qmd).
 
+`TEXT`
+: The instruction, as a positional argument. Line structure does not matter under `text/1`.
+
 `--text TEXT`
-: The instruction, given directly. Line structure does not matter under `text/1`.
+: The same thing as a flag, for a caller that would rather be explicit.
 
 `--file PATH`
-: File holding the instruction, or `-` for standard input (default when `--text` is absent).
+: File holding the instruction, or `-` for standard input.
 
 `--out PATH`
-: Write the block to a file instead of standard output.
+: Write the block to this file, replacing what is there, or to standard output for `-`.
+
+`--append PATH`
+: Append the block to this file, rather than searching for one.
+
+With neither flag the block is appended to the nearest instruction file: starting at the working
+directory and walking up, the first `AGENTS.md` or `CLAUDE.md` found, `AGENTS.md` winning within a
+directory because that is the file Codex reads. The walk stops at the repository root, or at the
+home directory outside a repository, so a block signed in one checkout cannot drift up into a file
+that covers every checkout above it. With no such file anywhere on that path the block goes to
+standard output; signing does not create an instruction file, because a block in a file nothing
+reads authorizes nothing. Appending leaves a blank line before the block and never rewrites what
+was already there.
 
 `--dev`
 : Sign with a dev key even when a passkey is enrolled; refuses a `--kid` that is not a dev key.
