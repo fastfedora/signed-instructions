@@ -121,13 +121,21 @@ At a terminal, where that would hang with no prompt, the command says what to ty
 
 Before anything is signed the command prints every term that carries authority — the canonical
 text, the signer, the key, the authorization context, the expiry and the file the block will go
-into — and asks for a yes. The question is read from `/dev/tty` rather than standard input, so the
-instruction can arrive on a pipe while the answer still comes from the person at the keyboard. With
-no terminal to ask at, the command refuses rather than assuming: `-y` is how an unattended signer
-says so.
+into. It does not ask. With a passkey, the sign page shows those same terms and the signer approves
+there, by touching the authenticator, or declines with the page's Cancel button or by closing the
+page; the command only writes a block once an assertion comes back verified.
 
-With a passkey, the terms include a six-digit confirmation code, and the sign page shows the same
-code. See [Confirmation code](../components/signing.qmd#confirmation-code) for why that matters.
+Approval belongs on the page because the page is the one surface a signer is certain to be looking
+at. A terminal question needs a controlling terminal, and a command run through a harness that owns
+the keyboard — an agent's shell escape, for one — has none, so a terminal question would refuse to
+sign exactly where the signer is sitting in front of the machine and ready to approve.
+
+With a passkey the terms also include a six-digit confirmation code, and the sign page shows the
+same code. See [Confirmation code](../components/signing.qmd#confirmation-code) for why that
+matters.
+
+A dev key opens no page, so dev-mode signing is not confirmed anywhere. That is consistent with
+what a dev-mode signature means: possession of a key file, not the presence of a person.
 
 Either identifier is enough: a `--kid` names its signer through the registry, and a `--signer`
 with exactly one enrolled key names that key. A signer's passkeys are preferred over their dev
@@ -181,10 +189,6 @@ that covers every checkout above it. With no such file anywhere on that path the
 standard output; signing does not create an instruction file, because a block in a file nothing
 reads authorizes nothing. Appending leaves a blank line before the block and never rewrites what
 was already there.
-
-`-y`, `--yes`
-: Sign without confirming the terms first. For an unattended signer; it skips the one step that
-  establishes a person approved these words.
 
 `--dev`
 : Sign with a dev key even when a passkey is enrolled; refuses a `--kid` that is not a dev key.

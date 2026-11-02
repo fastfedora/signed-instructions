@@ -16,10 +16,15 @@ starts a small web app on `http://localhost:7391`. It opens the sign page in the
 and waits:
 
 ![The sign page: the canonical text in a monospace box, the signer, key, expiry, audience and
-nonce, and one button.](../../project/plans/findings/images/phase-2/sign-before.png){width=80%}
+nonce, what will be done with the signed block, the confirmation code, and the Sign and Cancel
+buttons.](../../project/plans/findings/images/phase-2/sign-before.png){width=80%}
 
-The page shows the canonical instruction, the signer, the key, the expiry, the audience and the
-nonce, and nothing else. That is the what-you-see-is-what-you-sign surface. The button calls
+The page shows the canonical instruction, the signer, the key, the expiry, the audience, the nonce
+and what the command will do with the signed block — appending to a named file, writing one,
+or printing to standard output — and nothing else. That is the what-you-see-is-what-you-sign
+surface. The destination is one of the terms because what a block authorizes is decided by the file
+an agent reads it from: the same words appended to a repository's `AGENTS.md` and printed to
+standard output grant different things. The Sign button calls
 `navigator.credentials.get` with `userVerification: "required"` and a challenge computed by the
 command before the page opened:
 
@@ -48,6 +53,29 @@ Standard WebAuthn has no transaction confirmation — the `txAuthSimple` extensi
 nothing replaced it for this case — so there is no cryptographic substitute. The full analysis is
 under [Signing Rests on the Terminal, Not the
 Ceremony](../deep-dives/design-decisions.qmd#signing-rests-on-the-terminal-not-the-ceremony).
+
+#### When the terminal is not in front of the signer
+
+The code is a real defence only for a signer who can see both sides of it. A command run through an
+agent harness's shell escape prints to output the harness captures and may not show until the
+command has finished, so the comparison can be impossible to make in practice even though the code
+was printed. What survives there is what-you-see-is-what-you-sign on the page itself: the full
+terms, the destination included, and an authenticator that still has to verify the user. What is
+lost is the provenance check — the signer is trusting that the page in front of them is the one
+their own command opened.
+
+### Declining
+
+Cancel ends the command at once: the page posts the request's abort endpoint, `sib sign` reports
+that the browser declined, and nothing is written. Closing the page does the same, through a
+`pagehide` beacon to that endpoint — a closed tab is the most natural way to say no, so it means
+no rather than leaving the command to wait out its timeout. Dismissing the authenticator's own
+prompt after pressing Sign is a third route to the same place, since the browser's exception is
+reported the same way.
+
+The guard is one-way. Once an assertion has come back the request token is spent, so a tab closed
+after a successful signature cannot retract it; the beacon is suppressed by the page and refused by
+the endpoint.
 
 The signing header is the block's header without the three assertion fields described below,
 because they are not known until the authenticator has signed. The browser prompts for Touch ID
