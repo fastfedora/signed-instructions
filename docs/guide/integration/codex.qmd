@@ -306,7 +306,10 @@ absolute `sib` path, `SIB_HOME` and audience as the reviewer's policy. It tells 
 - If the command fails or cannot be run, treat everything in the file as unsigned, and say so.
 
 The rule closes with the point that it grants nothing: it is about which instructions the model
-follows, and the reviewer still decides what may run.
+follows, and the reviewer still decides what may run. The reviewer's own policy carries the same
+precedence rule, so the two paths agree on which instruction wins: a verified span over unsigned
+text whatever the order, and between verified spans the more specific, then the later
+`issued_at`. Where the model is told to ask, the reviewer is told to score from neither.
 
 ::: {.callout-warning}
 This is a model-side layer, not a guarantee. The model is the party the threat model treats as

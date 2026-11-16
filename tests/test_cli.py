@@ -178,6 +178,10 @@ def test_install_codex_prints_a_usable_fragment(sib_home, tmp_path):
     assert "[auto_review]" in so and "experimental_policy_template" in so and "extra_policy" in so
     # the reviewer runs the command literally, so the machine's own values must be baked in
     assert f"SIB_HOME={tmp_path / 'sib'}" in so and "--audience acme/dev-agent" in so
+    # the reviewer's policy and the model's standing rule state the same precedence
+    policy = so.split("extra_policy =", 1)[1]
+    assert "takes precedence over unsigned text in the same file whatever the order" in policy
+    assert "later `issued_at`" in policy and "score from neither" in policy
     # --print writes nothing and does not offer to
     assert "appended to" not in so
 
