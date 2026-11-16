@@ -23,12 +23,16 @@ sib keygen --signer alice@example.com --enroll
 # Or enroll a passkey (Touch ID, Windows Hello, a security key) through the browser
 sib enroll --signer alice@example.com
 
-# Sign an instruction given on the command line, writing the block to stdout
-sib sign --signer alice@example.com --expires 2h --audience acme/dev-agent \
-  --text "You may deploy the current main branch to staging whenever the test suite passes."
+# Sign an instruction, appending the block to the nearest AGENTS.md or CLAUDE.md
+sib sign "You may deploy the current main branch to staging whenever the test suite passes."
 
-# Sign the contents of a file instead
-sib sign --signer alice@example.com --expires 2h --audience acme/dev-agent --file instruction.txt
+# Or name the signer, the context and an expiry, and write the block elsewhere
+sib sign --signer alice@example.com --expires 2h --audience acme/dev-agent --out block.txt \
+  "You may deploy the current main branch to staging whenever the test suite passes."
+
+# Sign the contents of a file, or anything on standard input
+sib sign --file instruction.txt
+git log -1 --format=%s | sib sign
 
 # Verify every block in a file for a given audience
 sib verify CLAUDE.md --audience acme/dev-agent
@@ -53,7 +57,15 @@ Create a dev-mode Ed25519 key under `$SIB_HOME/dev-keys/` and optionally enroll 
 : Key identifier, by convention `signer#label`. Overrides the derived name.
 
 `--enroll`
-: Also add the public key to the registry. Requires `--signer`.
+: Also add the public key to the registry. Requires `--signer`. Refused when that signer already
+  holds a passkey: a software key signs from a file with nobody present, and anything that can run
+  `sib` can create one, so a second weaker key under a name that already has a passkey can only
+  weaken what a signature from that person means. Without `--enroll` the key file is still
+  written, because a key nobody is enrolled for confers nothing.
+
+`--audience ID`
+: Record this as the registry's `default_audience`, so `sign`, `verify` and `install` need no
+  audience afterwards. See [audience](#audience) for what the name should be.
 
 `--dev`
 : Accepted for clarity; dev mode is the only mode `keygen` supports.
@@ -94,45 +106,250 @@ authenticator; see [Biometric Signing](../components/signing.qmd#enrollment).
 
 ### sign
 
-Clearsign an instruction. The command prints the canonical text and the terms before signing, so
-what you see is what you sign. With a passkey it opens the sign page and waits for the
-authenticator; with a dev key it signs at once.
+Clearsign an instruction. The command prints the canonical text, the terms and the destination
+before signing, so what you see is what you sign. With a passkey it opens the sign page and waits
+for the authenticator; with a dev key it signs at once.
+
+The instruction itself is the one positional argument, so the short form is the whole command:
+
+```bash
+sib sign "You may deploy the current main branch to staging."
+```
+
+Given no argument and neither `--text` nor `--file`, the instruction is read from standard input.
+At a terminal, where that would hang with no prompt, the command says what to type instead.
+
+Before anything is signed the command prints every term that carries authority — the canonical
+text, the signer, the key, the authorization context, the expiry and the file the block will go
+into. It does not ask. With a passkey, the sign page shows those same terms and the signer approves
+there, by touching the authenticator, or declines with the page's Cancel button or by closing the
+page; the command only writes a block once an assertion comes back verified.
+
+Approval belongs on the page because the page is the one surface a signer is certain to be looking
+at. A terminal question needs a controlling terminal, and a command run through a harness that owns
+the keyboard — an agent's shell escape, for one — has none, so a terminal question would refuse to
+sign exactly where the signer is sitting in front of the machine and ready to approve.
+
+With a passkey the terms also include a six-digit confirmation code, and the sign page shows the
+same code. See [Confirmation code](../components/signing.qmd#confirmation-code) for why that
+matters.
+
+A dev key opens no page, so dev-mode signing is not confirmed anywhere. That is consistent with
+what a dev-mode signature means: possession of a key file, not the presence of a person.
 
 Either identifier is enough: a `--kid` names its signer through the registry, and a `--signer`
 with exactly one enrolled key names that key. A signer's passkeys are preferred over their dev
-keys; with several candidates, the command lists them and asks for `--kid`.
+keys; with several candidates, the command lists them and asks for `--kid`. With neither, the
+command signs as this machine's `git config user.email`, if a key is enrolled for it, and says
+whom it chose — so the usual case needs no identifier at all. A git identity with no enrolled key
+is an error rather than a guess, because guessing would surface later as `unknown_signer`, a long
+way from the cause.
 
 `--signer ID`
-: The signer, written to the `iss` header field. Derived from `--kid` when omitted; checked for
-  agreement when both are given.
+: The signer, written to the `iss` header field. Derived from `--kid` when omitted, then from
+  `git config user.email`; checked for agreement when both it and `--kid` are given.
 
 `--kid ID`
 : The key to sign with. Derived from `--signer` when the signer has one candidate key.
 
 `--expires DURATION`
-: Validity window from now, as `30m`, `2h` or `1d` (default: `2h`).
+: Validity window from now, as `30m`, `2h` or `1d`. Omitted by default, and a block with no `exp`
+  does not expire: it is valid until it is removed from the file it lives in, which is what
+  standing authorization in an instruction file is meant to be. An expiry is still the right choice
+  for a block covering one task, and the only thing that limits a copy taken elsewhere.
 
 `--audience ID`
-: The deployment or harness the block is for. Optional for a dev key; required for a passkey,
-  because a block with no audience is refused in enforced mode.
+: The authorization context the block is for. Falls back to `SIB_AUDIENCE` and then the registry's
+  `default_audience`, and the signing preview names which source was used. Optional for a dev key;
+  required for a passkey, because a block with no audience is refused in enforced mode.
 
 `--canon RULE`
 : Canonicalization rule (default: `text/1`). See [Canonicalization](../components/canonicalization.qmd).
 
+`TEXT`
+: The instruction, as a positional argument. Line structure does not matter under `text/1`.
+
 `--text TEXT`
-: The instruction, given directly. Line structure does not matter under `text/1`.
+: The same thing as a flag, for a caller that would rather be explicit.
 
 `--file PATH`
-: File holding the instruction, or `-` for standard input (default when `--text` is absent).
+: File holding the instruction, or `-` for standard input.
 
 `--out PATH`
-: Write the block to a file instead of standard output.
+: Write the block to this file, replacing what is there, or to standard output for `-`.
+
+`--append PATH`
+: Append the block to this file, rather than searching for one.
+
+With neither flag the block is appended to the nearest instruction file: starting at the working
+directory and walking up, the first `AGENTS.md` or `CLAUDE.md` found, `AGENTS.md` winning within a
+directory because that is the file Codex reads. The walk stops at the repository root, or at the
+home directory outside a repository, so a block signed in one checkout cannot drift up into a file
+that covers every checkout above it. With no such file anywhere on that path the block goes to
+standard output; signing does not create an instruction file, because a block in a file nothing
+reads authorizes nothing. Appending leaves a blank line before the block and never rewrites what
+was already there.
 
 `--dev`
 : Sign with a dev key even when a passkey is enrolled; refuses a `--kid` that is not a dev key.
 
 `--timeout SECONDS`, `--no-browser`, `--browser NAME`
 : As for `enroll`.
+
+### install
+
+Install SIB into an agent harness. Takes the harness as a sub-subcommand.
+
+#### install codex
+
+Writes the auto-review configuration that makes Codex's reviewer run `sib verify` itself and score
+a verified signature as user authorization. It is meant to be the only command you type before
+launching Codex, so it asks for the two things no package can ship — a name for this authorization
+context, and a key to sign with — rather than refusing until you have arranged them yourself.
+
+It merges rather than overwrites, so it is safe to run against a configuration you already use.
+Every setting it does not own is left where it is, the previous file is copied to
+`<config>.sib-bak` before anything is written, and it asks before each change:
+
+- **Naming this authorization context** — the context signed instructions are valid in. Asked
+  first, with a suggestion built from the hostname and your account, such as
+  `m4-watchtower/trevor-dev`. The answer is recorded as the registry's
+  [`default_audience`](#audience), so `sign` and `verify` agree with the reviewer without being
+  told. A vendor name is deliberately not suggested: `openai/codex` would be byte-identical in
+  everyone's install and the check would stop distinguishing anything. Skipped when `--audience`,
+  `SIB_AUDIENCE` or a recorded default already answers it.
+
+- **Setting `approvals_reviewer = "auto_review"`** — the default is yes when the key is absent, and
+  no when you have already set it to something else, since enabling the reviewer should not
+  silently discard a choice you made. Declining still writes the policy; the reviewer can then be
+  enabled per run with `codex exec --approve-for-me`.
+
+- **Replacing `experimental_policy_template` or `extra_policy`** — asked only when a previous run
+  (or you) already set them, and the default is no. Declining writes nothing at all.
+
+- **Writing the standing rule for the model** — into `AGENTS.md` beside the config
+  (`$CODEX_HOME/AGENTS.md`), between `<!-- sib:begin -->` and `<!-- sib:end -->` markers so a
+  later run replaces it in place and everything else in the file stays. The rule tells Codex to run
+  `sib verify` before following an instruction file that holds a signed block, and to let a
+  verified block take precedence over unsigned text whatever the order. It is for instructions that
+  need no tool call, which the reviewer never sees; see [Instructions Without a Tool
+  Call](../integration/codex.qmd#instructions-without-a-tool-call). The default is yes, and an
+  existing file is copied to `AGENTS.md.sib-bak` first.
+
+- **Enrolling a signing key** — asked last, and only when no passkey is enrolled, which is exactly
+  when the install cannot yet produce a signature that proves a person was there. With no keys at
+  all, every block verifies as `unknown_signer`: the safe direction, and an inert one. With only
+  software keys the install signs in dev mode, where a signature proves possession of a file and a
+  block confers nothing as soon as any passkey exists — so an existing dev key is not a reason to
+  stop asking. A passkey is the default, and the only offer once software keys exist; the signer
+  defaults to the one already in the registry, or to this machine's `git config user.email`.
+
+Writing the file is not among the questions: it is what the command does, `--print` is how you look
+without writing, and the previous config is copied to `.sib-bak` first rather than discarded.
+
+The configuration and that rule are all it writes. Signing is a command the user runs —
+`!sib sign "..."` from inside Codex, which runs in their shell and may open the browser the
+ceremony needs, or the same in their own terminal. It is not something an agent can do on their behalf: the ceremony needs
+their authenticator, and the sandbox around the agent's own commands denies it the loopback
+listener in any case.
+
+Both setup questions need a terminal. Non-interactively, `--yes` takes the suggested context name
+and prints it, and a key is never created on a script's behalf — a passkey needs the person at
+the authenticator, and a software key is a choice to make deliberately, so the install says how to
+enroll one later and leaves the registry empty. With neither a terminal nor `--yes` it refuses
+rather than invent a name nobody would see: a wrong audience is not a visible failure, it simply
+verifies nothing.
+
+`--audience ID`
+: The identifier this harness presents to the verifier, baked into the command the reviewer runs.
+  Falls back to `SIB_AUDIENCE` and then the registry's `default_audience`, and asks when none of
+  them answers, so you rarely pass it. The installer prints which source it used.
+
+`--config PATH`
+: Config file to merge into. The default follows Codex: `$CODEX_HOME/config.toml` when that
+  variable is set, otherwise `~/.codex/config.toml`. Setting `CODEX_HOME` to a scratch directory
+  is the way to try a configuration without touching the real one, since it relocates config,
+  auth and state together.
+
+`--sib-path PATH`
+: Absolute path to the `sib` binary the reviewer will run (default: the one on `PATH`).
+
+`--home PATH`
+: Registry directory, written into the command as `SIB_HOME` (default: `~/.sib`). Keep it outside
+  any repository; an agent that can write there can enroll its own key.
+
+`--print`
+: Print the configuration and the standing rule, and write nothing.
+
+`--yes`
+: Answer yes to every question, for scripting. A reviewer you set to another value is still kept.
+
+::: {.callout-note}
+The configuration pins Codex's own Guardian prompt template, because `auto_review.extra_policy` is
+silently dropped with the template the model catalog serves, which has no `{{ extra_policy }}` slot
+(openai/codex#50309). When that is fixed the template pin can go and `extra_policy` alone will do.
+:::
+
+::: {.callout-important}
+SIB scores authorization, not risk. Codex allows low and medium risk actions whatever the
+authorization, so a deploy is only refused when your own policy says that class of action needs
+authorizing. Add that rule under `[auto_review]` yourself; the installer says so too.
+:::
+
+
+### allow-authenticator
+
+Add an authenticator model to this registry's `allowed_aaguids`, so its assertions count as
+user-verified here. The default list holds models known to verify their user biometrically;
+widening it is a policy decision, which is why it is a command rather than a flag on `enroll`.
+
+`AAGUID`
+: The AAGUID as `sib enroll` reported it. Case-insensitive. A model already on the default list is
+  reported and nothing is written.
+
+`LABEL`
+: A name for it, used in the warning messages.
+
+```bash
+sib allow-authenticator bada5566-a7aa-401f-bd96-45619a55120d 1Password
+```
+
+Think twice before using it for a password manager. With attestation `none` the AAGUID is the
+authenticator's own claim, and a vault credential syncs rather than staying on one device, so
+"a verified human at this machine" no longer holds.
+
+### audience
+
+Show or set the registry's default audience, which `sign`, `verify` and `install` use when no
+audience is given.
+
+`VALUE`
+: The authorization context to record. Omit it to print the audience in force and where it came
+  from.
+
+```bash
+sib audience my-company/trevor-dev     # record it once
+sib audience                           # my-company/trevor-dev   (from default_audience in ~/.sib/registry.json)
+```
+
+[`sib install codex`](#install-codex) asks for this and records the answer, so recording one by
+hand is for renaming a context or scripting an install.
+
+The audience names **one authorization context, not a vendor or a product**: the context within
+which signed instructions are valid. A machine is the usual answer, but a bot or a team is as
+legitimate — `my-org/slackbot` set on every host running that bot is one context. Matching is
+exact: there is no prefix or wildcard logic, so `my-company` does not accept a block signed for
+`my-company/trevor-dev`. That is the point — a signature minted for your dev agent must not verify
+in CI, in a teammate's checkout, or in anyone else's copy of the same tool. Naming it after the
+harness vendor would give every installation in the world the same audience and the check would
+stop distinguishing anything.
+
+Both halves must agree, because the signer writes the name into the block and the verifier declares
+its own. Three sources are consulted in order, and `sib audience` reports which one won:
+
+1. `--audience` on the command.
+2. `SIB_AUDIENCE` in the environment, which is how a test harness overrides one run.
+3. `default_audience` in the registry, written by `sib audience` or `sib keygen --audience`.
 
 ### verify
 
@@ -144,7 +361,8 @@ and dev before that, unless `SIB_MODE` or a flag says otherwise.
 : The file to check, or `-` for standard input.
 
 `--audience ID`
-: The audience of this harness; blocks for another audience fail with `audience_mismatch`.
+: The audience of this harness; blocks for another audience fail with `audience_mismatch`. Falls
+  back to `SIB_AUDIENCE` and then the registry's `default_audience`.
 
 `--enforced`
 : Verify in enforced mode: dev-mode blocks and keys confer nothing.
@@ -178,7 +396,11 @@ usage error, such as signing with a key that is not enrolled for the signer.
 : Directory for dev keys and `registry.json` (default: `~/.sib`).
 
 `SIB_MODE`
-: `dev` or `enforced`; overrides the default described under `verify`.
+: `dev` or `enforced`. It may tighten the default described under `verify` and not loosen it: with
+  a passkey enrolled, `SIB_MODE=dev` is reported and ignored, as is any value that is not a mode.
+  Use `--dev` for one command. The reason is under
+  [What the environment may do](../deep-dives/design-decisions.qmd#what-the-environment-may-do).
 
 `SIB_BROWSER`, `SIB_WEBAUTHN_PORT`, `SIB_REQUIRE_ATTESTATION`, `SIB_ATTESTATION_ROOTS`
 : Passkey enrollment and signing; see [Biometric Signing](../components/signing.qmd#environment).
+  `SIB_BROWSER` may name an installed browser but not a command to run.

@@ -15,6 +15,7 @@ from sib.verify import clear_lines
 ALICE = "alice@example.com"
 KID = "alice@example.com#dev-test"
 AUD = "acme/dev-agent"
+NO_EXPIRY = object()      # make_block(exp=NO_EXPIRY) omits the claim, as a standing block does
 
 
 @pytest.fixture
@@ -39,7 +40,7 @@ def make_block(text, *, kid=KID, signer=ALICE, aud=AUD, canon="text/1", iat=None
     now = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
     h = Header(alg="EdDSA", kid=kid, canon=header_canon or canon, iss=signer,
                iat=format_time(iat or now - dt.timedelta(minutes=1)),
-               exp=format_time(exp or now + dt.timedelta(hours=2)),
+               exp=None if exp is NO_EXPIRY else format_time(exp or now + dt.timedelta(hours=2)),
                jti=jti or b64u_encode(secrets.token_bytes(12)), mode=mode, aud=aud)
     hb = h.encode()
     sig = keys_dev.sign(kid, signing_input(hb, canonicalize(canon, text)))

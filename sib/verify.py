@@ -94,10 +94,11 @@ def verify_block(block: Block, now: dt.datetime, audience: str | None, registry:
     if mismatches:
         return SpanResult("metadata_mismatch", error="; ".join(mismatches), **base)
 
-    iat, exp = parse_time(h.iat), parse_time(h.exp)
+    iat = parse_time(h.iat)
+    exp = parse_time(h.exp) if h.exp is not None else None
     if now + CLOCK_SKEW < iat:
         return SpanResult("not_yet_valid", error=f"issued at {h.iat}, now {h and now.strftime('%Y-%m-%dT%H:%M:%SZ')}", **base)
-    if now >= exp:
+    if exp is not None and now >= exp:
         return SpanResult("expired", error=f"expired at {h.exp}", **base)
     if h.aud is None:
         if mode == "enforced":
@@ -112,16 +113,26 @@ def verify_block(block: Block, now: dt.datetime, audience: str | None, registry:
 
 
 def _metadata_mismatches(clear: dict, h: Header) -> list[str]:
+    """The clear lines are a human-readable echo and are not themselves signed, so
+    each one is checked against the header that is. A line claiming a term the
+    header does not carry — an expiry on a block that has none, say — is as
+    misleading as one that disagrees, so it fails the same way."""
     expected = {"Signer": h.iss, "Expires": h.exp, "Audience": h.aud}
     out = []
     for k, v in clear.items():
-        if k in expected and expected[k] is not None and v != expected[k]:
+        if k not in expected:
+            continue
+        if expected[k] is None:
+            out.append(f"clear line {k}: {v!r} but the signed header has no {k} claim")
+        elif v != expected[k]:
             out.append(f"clear line {k}: {v!r} does not match signed header {expected[k]!r}")
     return out
 
 
 def clear_lines(h: Header) -> dict:
-    d = {"Signer": h.iss, "Expires": h.exp}
+    d = {"Signer": h.iss}
+    if h.exp:
+        d["Expires"] = h.exp
     if h.aud:
         d["Audience"] = h.aud
     return d

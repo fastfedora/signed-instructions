@@ -18,9 +18,16 @@ _STYLE = """
   button { font: inherit; font-weight: 600; padding: 0.6rem 1.4rem; border-radius: 6px; border: 1px solid #0b57d0;
            background: #0b57d0; color: #fff; cursor: pointer; }
   button:disabled { opacity: 0.5; cursor: default; }
+  button.secondary { background: #fff; color: #1a1a1a; border-color: #bbb; margin-left: 0.5rem; }
   #status { margin-top: 1rem; min-height: 1.5rem; }
   .ok { color: #137333; } .err { color: #b3261e; } .warn { color: #8a5a00; }
   .note { color: #555; font-size: 0.9rem; }
+  .action { margin: 1rem 0 0.25rem; }
+  .action strong { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+                   word-break: break-all; }
+  .code { font-size: 1.1rem; margin: 1rem 0 0.25rem; }
+  .code strong { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+                 letter-spacing: 0.2em; font-size: 1.4rem; }
 """
 
 _SCRIPT = """
@@ -39,11 +46,28 @@ _SCRIPT = """
     if (!r.ok) throw new Error(data.error || data.detail || ('HTTP ' + r.status));
     return data;
   }
+  // Whether the command has been given an answer, of any kind. Once it has, the
+  // request token is spent and there is nothing left to decline.
+  let settled = false;
   // A failure in the browser (cancelled prompt, authenticator refusal) ends the CLI's wait now.
   async function abort(kind, token, e) {
+    settled = true;
     const msg = (e && e.message) || String(e);
     try { await post(`/api/${kind}/${token}/abort`, { error: msg }); } catch (_) {}
     status('err', (kind === 'enroll' ? 'Enrollment' : 'Signing') + ' failed: ' + msg + ' Run the command again to retry.');
+  }
+  // Closing the page is the most natural way to say no, so it has to mean no.
+  // Without this the command would sit through its whole timeout waiting for an
+  // answer that is never coming. sendBeacon rather than fetch: a page being torn
+  // down is not guaranteed to finish an ordinary request, while a beacon is
+  // handed to the browser to deliver after the page is gone.
+  function declineOnClose(kind, token) {
+    addEventListener('pagehide', () => {
+      if (settled) return;
+      navigator.sendBeacon(`/api/${kind}/${token}/abort`,
+        new Blob([JSON.stringify({ error: 'the page was closed without signing' })],
+                 { type: 'application/json' }));
+    });
   }
 """
 
@@ -92,18 +116,46 @@ Hello, or your security key). The passkey's public key is recorded in the signer
 
 
 def sign_page(token: str, payload: dict) -> str:
-    rows = [("Signer", payload["signer"]), ("Key", payload["kid"]), ("Expires", payload["exp"]),
+    """The terms the signer approves: the canonical text, the header fields, what
+    the CLI will do with the signed block, and the confirmation code.
+
+    This page is where approval happens. The terminal prints the same terms, but
+    it does not ask: it cannot, wherever the command was started by something
+    that owns the keyboard and leaves no controlling terminal behind -- an agent
+    harness's shell escape, for one. So everything that carries authority has to
+    be here, the destination included, and declining is closing the page or
+    dismissing the authenticator.
+    """
+    rows = [("Signer", payload["signer"]), ("Key", payload["kid"]), ("Expires", payload["exp"] or "never (valid until removed)"),
             ("Audience", payload.get("aud") or "any"), ("Nonce", payload["jti"])]
     dl = "".join(f"<dt>{html.escape(k)}</dt><dd>{html.escape(v)}</dd>" for k, v in rows)
+    action = (f"""
+<p class="action">On signing: <strong>{html.escape(payload["action"])}</strong></p>
+<p class="note">What a block authorizes depends on the file an agent reads it from, so this is part of
+what you are approving. Cancel if it is not where you meant the instruction to go.</p>"""
+              if payload.get("action") else "")
     body = f"""
 <h1>Sign this instruction</h1>
 <pre>{html.escape(payload["ctext"])}</pre>
-<dl>{dl}</dl>
-<button id="go">Sign with user verification</button>"""
+<dl>{dl}</dl>{action}
+<p class="code">Confirmation code <strong>{html.escape(payload["code"])}</strong></p>
+<p class="note">Your terminal printed this code when you ran <code>sib sign</code>. If it does not
+match, cancel: the ceremony you are being asked to approve is not the one you started.</p>
+<button id="go">Sign with user verification</button>
+<button id="no" class="secondary">Cancel</button>"""
     script = f"""
   const TOKEN = {token!r};
+  declineOnClose('sign', TOKEN);
+  const freeze = () => ['go', 'no'].forEach(id => document.getElementById(id).disabled = true);
+  // An explicit no, which the command reports and acts on at once rather than
+  // leaving the signer to guess whether walking away was enough.
+  document.getElementById('no').onclick = async () => {{
+    settled = true; freeze(); status('', 'Cancelling…');
+    try {{ await post(`/api/sign/${{TOKEN}}/abort`, {{ error: 'cancelled on the sign page' }}); }} catch (_) {{}}
+    status('err', 'Not signed. Nothing was written. You can close this tab.');
+  }};
   document.getElementById('go').onclick = async () => {{
-    const btn = document.getElementById('go'); btn.disabled = true; status('', 'Waiting for the authenticator…');
+    freeze(); status('', 'Waiting for the authenticator…');
     try {{
       const opts = await post(`/api/sign/${{TOKEN}}/options`);
       opts.challenge = b64u.dec(opts.challenge);
@@ -117,6 +169,7 @@ def sign_page(token: str, payload: dict) -> str:
                     signature: b64u.enc(cred.response.signature),
                     userHandle: cred.response.userHandle ? b64u.enc(cred.response.userHandle) : null }} }};
       const res = await post(`/api/sign/${{TOKEN}}/finish`, body);
+      settled = true;
       if (res.status === 'verified') status('ok', 'Signed and verified. Return to the terminal; you can close this tab.');
       else status('err', `The assertion did not verify: ${{res.status}} (${{res.error}}). The terminal has the details.`);
     }} catch (e) {{ await abort('sign', TOKEN, e); }}

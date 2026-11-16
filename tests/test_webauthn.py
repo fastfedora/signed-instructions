@@ -223,8 +223,33 @@ def test_default_mode(sib_home, monkeypatch, auth):
     enroll_fake(reg, auth, ALICE, PKID)
     reg.save()
     assert default_mode() == "enforced"
+    monkeypatch.setenv("SIB_MODE", "enforced")
+    assert default_mode() == "enforced"            # the environment may tighten
+
+
+def test_the_environment_cannot_downgrade_the_mode(sib_home, monkeypatch, auth, capsys):
+    """A software key is cheap -- anything that can run `sib` enrolls one, with
+    nobody present -- so enforced mode is what keeps one from reading as human
+    authorization. An agent that can write a shell startup file must not be able
+    to turn that off for every later verification."""
+    reg = Registry()
+    enroll_fake(reg, auth, ALICE, PKID)
+    reg.save()
     monkeypatch.setenv("SIB_MODE", "dev")
-    assert default_mode() == "dev"
+    assert default_mode() == "enforced"
+    assert "ignoring SIB_MODE=dev" in capsys.readouterr().err
+    # nor by naming something that is not a mode, which would read as dev
+    # everywhere the comparison is against "enforced"
+    monkeypatch.setenv("SIB_MODE", "Enforced")
+    assert default_mode() == "enforced"
+    assert "not one of dev, enforced" in capsys.readouterr().err
+
+
+def test_the_environment_still_tightens_before_a_passkey(sib_home, monkeypatch):
+    monkeypatch.setenv("SIB_MODE", "enforced")
+    assert default_mode(Registry()) == "enforced"
+    monkeypatch.setenv("SIB_MODE", "dev")
+    assert default_mode(Registry()) == "dev"        # no passkey, so dev is the floor
 
 
 # ---- enrollment ----

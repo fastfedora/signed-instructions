@@ -84,10 +84,12 @@ def test_enroll_refusal_and_wrong_kind():
 
 # ---- sign ----
 
-def _sign_request(state, auth, reg, text="You may deploy to staging with scripts/deploy.sh staging."):
+def _sign_request(state, auth, reg, text="You may deploy to staging with scripts/deploy.sh staging.",
+                  action=""):
     key = reg.lookup(PKID)[1]
     h = _header()
-    payload = {"header": h, "ctext": text, "key": key, "allowed_aaguids": reg.allowed_aaguids()}
+    payload = {"header": h, "ctext": text, "key": key, "allowed_aaguids": reg.allowed_aaguids(),
+               "action": action}
     return state.add("sign", payload, sign_challenge(h, text)), h
 
 
@@ -223,12 +225,174 @@ def test_open_url_picks_the_configured_browser(monkeypatch, tmp_path):
     script = tmp_path / "fakebrowser.sh"
     script.write_text(f'#!/bin/sh\necho "$@" > "{log}"\n')
     script.chmod(0o755)
-    open_url("http://localhost:7391/z", f"{script} --new-window")
-    import time
-    for _ in range(50):
-        if log.exists() and log.read_text().strip():
-            break
-        time.sleep(0.05)
+    # wait on the child rather than polling for its output: a loaded machine made the
+    # old 2.5s budget expire, and the bare read then failed with FileNotFoundError
+    proc = open_url("http://localhost:7391/z", f"{script} --new-window")
+    assert proc is not None, "a command-shaped browser should be run as a subprocess"
+    assert proc.wait(timeout=60) == 0, "the fake browser exited non-zero"
     assert log.read_text().split() == ["--new-window", "http://localhost:7391/z"]
     with pytest.raises(BrowserFlowError, match="could not open"):
         open_url("http://localhost:7391/z", str(tmp_path / "missing-browser"))
+
+
+def test_a_sandbox_that_forbids_listening_says_so(monkeypatch):
+    """The old message blamed port contention for every startup failure. An agent
+    running `sib sign` inside its sandbox hits a bind refusal, and the answer is
+    not a different port."""
+    import socket as socket_mod
+    from sib.webauthn_app import check_can_listen
+
+    def refuse(self, addr):
+        raise PermissionError(1, "operation not permitted")
+    monkeypatch.setattr(socket_mod.socket, "bind", refuse)
+    with pytest.raises(BrowserFlowError, match="sandbox is blocking the loopback listener"):
+        check_can_listen(7391, "http://localhost:7391")
+
+
+def test_a_port_already_taken_says_that_instead():
+    import socket as socket_mod
+    from sib.webauthn_app import check_can_listen
+    held = socket_mod.socket(socket_mod.AF_INET, socket_mod.SOCK_STREAM)
+    held.bind(("127.0.0.1", 0))
+    held.listen(1)
+    port = held.getsockname()[1]
+    try:
+        with pytest.raises(BrowserFlowError, match="already in use"):
+            check_can_listen(port, f"http://localhost:{port}")
+    finally:
+        held.close()
+
+
+def test_the_sign_page_shows_the_confirmation_code(sib_home):
+    """The code is the only thing tying the page to the terminal that started
+    the ceremony: `http://localhost` is an origin any local process can take,
+    and the authenticator's own prompt names the relying party, never the text."""
+    auth = FakeAuthenticator()
+    reg = Registry()
+    enroll_fake(reg, auth, ALICE, PKID)
+    state, c = _client()
+    text = "You may deploy to staging with scripts/deploy.sh staging."
+    token, h = _sign_request(state, auth, reg, text)
+    code = keys_webauthn.code_for_challenge(sign_challenge(h, text))
+    page = c.get(f"/sign/{token}").text
+    assert len(code) == 6 and code.isdigit()
+    assert code in page and "Confirmation code" in page
+    assert "not the one you started" in page          # and says what a mismatch means
+
+
+def test_the_sign_page_shows_what_will_be_done_with_the_block(sib_home):
+    """The signer may be reading this page and nothing else: under -y there is no
+    terminal in the ceremony, so the destination has to be here. The same words
+    appended to a repository's AGENTS.md and printed to stdout authorize
+    different things."""
+    auth = FakeAuthenticator()
+    reg = Registry()
+    enroll_fake(reg, auth, ALICE, PKID)
+    state, c = _client()
+    token, h = _sign_request(state, auth, reg, action="appending to /work/repo/AGENTS.md")
+    page = c.get(f"/sign/{token}").text
+    assert "On signing:" in page and "appending to /work/repo/AGENTS.md" in page
+    assert "depends on the file an agent reads it from" in page
+
+
+def test_the_sign_page_offers_an_explicit_no(sib_home):
+    """Declining has to be an action on the page, not an absence of one. Without
+    a Cancel button the only way to say no was to start the ceremony and dismiss
+    the authenticator, which is a strange thing to ask of someone who has
+    already decided."""
+    auth = FakeAuthenticator()
+    reg = Registry()
+    enroll_fake(reg, auth, ALICE, PKID)
+    state, c = _client()
+    token, _ = _sign_request(state, auth, reg)
+    page = c.get(f"/sign/{token}").text
+    assert '<button id="no"' in page and ">Cancel<" in page
+    assert "cancelled on the sign page" in page
+    # and the button's endpoint ends the command's wait with that reason
+    r = c.post(f"/api/sign/{token}/abort", json={"error": "cancelled on the sign page"})
+    assert r.status_code == 200
+    pend = state.pending[token]
+    assert pend.done.is_set() and pend.result is None
+    assert "cancelled on the sign page" in pend.error
+
+
+def test_closing_the_sign_page_declines_instead_of_hanging(sib_home):
+    """A closed tab used to mean the command sat through its whole timeout. The
+    page sends a beacon on pagehide, which the same abort endpoint answers."""
+    auth = FakeAuthenticator()
+    reg = Registry()
+    enroll_fake(reg, auth, ALICE, PKID)
+    state, c = _client()
+    token, _ = _sign_request(state, auth, reg)
+    page = c.get(f"/sign/{token}").text
+    assert "declineOnClose('sign', TOKEN)" in page
+    assert "addEventListener('pagehide'" in page and "navigator.sendBeacon" in page
+    assert "if (settled) return;" in page          # not after the command already has an answer
+    # the beacon is a JSON blob, which is the same request the endpoint already takes
+    r = c.post(f"/api/sign/{token}/abort", content=b'{"error": "the page was closed without signing"}',
+               headers={"content-type": "application/json"})
+    assert r.status_code == 200
+    assert "closed without signing" in state.pending[token].error
+
+
+def test_a_settled_request_is_not_declined_afterwards(sib_home):
+    """pagehide fires on a tab closed after a successful signature too. The page
+    guards on `settled`, and the endpoint refuses a spent token in any case, so
+    a verified block cannot be undone by closing the tab it was signed in."""
+    auth = FakeAuthenticator()
+    reg = Registry()
+    enroll_fake(reg, auth, ALICE, PKID)
+    state, c = _client()
+    token, h = _sign_request(state, auth, reg)
+    challenge = keys_webauthn.b64u_decode(c.post(f"/api/sign/{token}/options").json()["challenge"])
+    assert c.post(f"/api/sign/{token}/finish", json=auth.get(challenge)).json()["ok"] is True
+    result = state.pending[token].result
+    assert c.post(f"/api/sign/{token}/abort", json={"error": "closed"}).status_code == 404
+    assert state.pending[token].result is result and state.pending[token].error is None
+
+
+def test_an_action_the_signer_should_not_trust_cannot_inject_markup(sib_home):
+    auth = FakeAuthenticator()
+    reg = Registry()
+    enroll_fake(reg, auth, ALICE, PKID)
+    state, c = _client()
+    token, _ = _sign_request(state, auth, reg, action="appending to <script>alert(1)</script>")
+    page = c.get(f"/sign/{token}").text
+    assert "<script>alert(1)</script>" not in page and "&lt;script&gt;" in page
+
+
+def test_the_code_follows_the_text_that_is_signed(sib_home):
+    auth = FakeAuthenticator()
+    reg = Registry()
+    enroll_fake(reg, auth, ALICE, PKID)
+    h = _header()
+    a = keys_webauthn.code_for_challenge(sign_challenge(h, "You may deploy to staging."))
+    b = keys_webauthn.code_for_challenge(sign_challenge(h, "You may deploy to production."))
+    assert a != b
+
+
+def test_sib_browser_may_name_a_browser_but_not_a_command(monkeypatch):
+    """An environment variable is set by anything that can write a shell startup
+    file. The browser is where the signer reads what they are about to approve,
+    so the variable may choose among installed browsers and may not name a
+    program to run."""
+    from sib.webauthn_app import open_url, BrowserFlowError
+    monkeypatch.setenv("SIB_BROWSER", "/tmp/not-a-browser.sh --steal")
+    with pytest.raises(BrowserFlowError) as e:
+        open_url("http://localhost:7391/sign/tok")
+    assert "not a browser this platform knows" in str(e.value) and "part of signing" in str(e.value)
+
+    # --browser is typed by the person at the terminal, so it still runs a command
+    ran = []
+    monkeypatch.setattr("subprocess.Popen", lambda argv, **kw: ran.append(argv))
+    open_url("http://localhost:7391/sign/tok", "/bin/echo opening")
+    assert ran == [["/bin/echo", "opening", "http://localhost:7391/sign/tok"]]
+
+
+def test_a_browser_name_in_the_environment_still_works(monkeypatch):
+    opened = []
+    monkeypatch.setenv("SIB_BROWSER", "safari")
+    monkeypatch.setattr("webbrowser.get", lambda name: type("B", (), {"open": lambda s, u: opened.append((name, u))})())
+    from sib.webauthn_app import open_url
+    open_url("http://localhost:7391/sign/tok")
+    assert opened == [("safari", "http://localhost:7391/sign/tok")]

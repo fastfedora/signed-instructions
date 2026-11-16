@@ -29,8 +29,8 @@ spec with test vectors.
   → first-seen `session_id`. Same session re-verifying is fine; a different
   session → `nonce_replayed`.
 
-- Clock skew allowance (proposal: 60 s) on `iat`; `exp` strict. `exp - iat`
-  capped by policy (proposal: 24 h default, configurable).
+- Clock skew allowance (proposal: 60 s) on `iat`; `exp` strict **when
+  present**. The `exp - iat` cap is withdrawn — see the amendment below.
 
 - Audience: the harness passes its audience id to the verifier (from the
   testbed `policy.yaml` or `SIB_AUDIENCE`). Missing `aud` in a block is
@@ -38,6 +38,33 @@ spec with test vectors.
 
 - Revocation: `~/.sib/revoked.jsonl` of `(kid, nonce)` or whole-key entries;
   `sib revoke <block|kid>` appends; verifier checks it (`revoked`).
+
+#### Amendment, 26 October 2026: `exp` is optional, which promotes this item
+
+`exp` was made optional, as RFC 7519 §4.1.4 has it, and `sib sign` now omits it
+by default. A block with no `exp` is valid until it is removed from the file it
+lives in, which is what standing authorization in an instruction file is meant
+to mean. Three consequences for this work item, none of them cosmetic.
+
+The `exp - iat` cap contradicts the decision and is withdrawn. A policy ceiling
+on validity would re-impose the expiry the signer deliberately declined, and it
+would do so silently, at verify time, far from the person who chose otherwise.
+If a deployment wants to insist on bounded authorizations, that belongs in its
+own policy text, not in the verifier.
+
+Block revocation stops being a convenience and becomes the only way to withdraw
+an unbounded authorization. Today revocation exists at key level only
+(`verify.py:107`), and there is no `sib revoke` command at all, so the only way
+to retract a standing block is to revoke its key — which invalidates every other
+block that key ever signed. The `(kid, nonce)` entry in the bullet above is the
+piece that matters now, and `sib revoke <block>` should land with it.
+
+And deleting a block from `AGENTS.md` is not revocation. It stops *that* copy
+being read; a copy pasted into another repository, a ticket or a chat still
+verifies, now without an expiry to limit it. The user's mental model — "valid
+until I delete it" — is only true if deletion is accompanied by a revocation
+record the verifier consults. Until `sib revoke` exists, the guide should say so
+plainly rather than imply that removal is withdrawal.
 
 ### 3.2 Origin labelling (VE-3)
 
@@ -160,3 +187,10 @@ SP-4 (lite), RI-1 (minus Slack bot), RI-3 (internal suite), RI-5 (quick start).
 - Nonce store on the verifier host is state; multiple harness instances on
   one machine share it by design, across machines they do not. Document as a
   v1 limitation.
+
+- Revocation shares that locality. A revocation record on one machine does not
+  reach another, so an unbounded block retracted here still verifies on a
+  colleague's laptop. A distributed revocation channel is out of scope for v1;
+  the honest mitigation is to say that an unbounded block should be signed for
+  a narrow audience, and that a widely scoped standing authorization wants an
+  expiry after all.

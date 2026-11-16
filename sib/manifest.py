@@ -52,7 +52,8 @@ def render_classifier_note(manifest: dict, limit: int = 1900) -> str:
         lines.append(f"SIB provenance: {len(verified)} verified human-signed instruction(s) in context"
                      f" (mode {manifest['mode']}).")
     for s in verified:
-        lines.append(f"[{s['id']}] verified, signed by {s['signer']}, expires {s['expires_at']},"
+        lines.append(f"[{s['id']}] verified, signed by {s['signer']},"
+                     f" {'expires ' + s['expires_at'] if s['expires_at'] else 'no expiry'},"
                      f" audience {s['audience'] or 'any'}: \"{s['text']}\"")
     if failed:
         summary = ", ".join(f"{s['id']} {s['status']}" + (f" (claims {s['signer']})" if s.get('signer') else "")

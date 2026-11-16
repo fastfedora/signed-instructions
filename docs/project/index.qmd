@@ -28,6 +28,10 @@ and the plans are published as they stand in the repository; neither has been th
 - [Phase 2 Findings](plans/findings/phase-2.md): Passkey signing through the browser, the
   WebAuthn verifier path and what the headless-browser run showed.
 
+- [Phase 4 Findings](plans/findings/phase-4-codex.md): The full system working in Codex with no
+  change to Codex, why its reviewer can carry authority where Claude Code's classifier cannot, and
+  the `extra_policy` bug that complicates the configuration.
+
 - [Attack Catalog](attacks.qmd): Every injection vector, channel probe, harness test and failed
   experimental design, with what happened and where the evidence is.
 

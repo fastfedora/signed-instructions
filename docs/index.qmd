@@ -96,11 +96,14 @@ To integrate the verifier into an agent harness, check out:
 - [Claude Code](guide/integration/claude-code.qmd): The three hooks, the installer, the gate policy
   and the auto-mode rule.
 
+- [Codex](guide/integration/codex.qmd): The reviewer policy, the installer, and the one place a
+  signature carries authority rather than only withholding it.
+
 - [Permission Classifier](guide/integration/classifier.qmd): The reference classifier, its
   backends and how to replace it.
 
 - [Other Harnesses](guide/integration/other-harnesses.qmd): The three steps any harness follows,
-  and the Codex and Agent SDK plans.
+  and the state of the Agent SDK and sidecar paths.
 
 For details on specific components, check out:
 

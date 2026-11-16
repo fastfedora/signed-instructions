@@ -36,6 +36,8 @@ website:
         contents:
         - text: default_mode
           href: reference/registry.qmd#default_mode
+        - text: resolve_audience
+          href: reference/registry.qmd#resolve_audience
       - section: verify
         href: reference/verify.qmd
         contents:
@@ -52,19 +54,15 @@ website:
       - section: classifier
         href: reference/classifier.qmd
         contents:
-        - text: classify
-          href: reference/classifier.qmd#classify
+        - text: load_policy_text
+          href: reference/classifier.qmd#load_policy_text
       - section: hooks
         href: reference/hooks.qmd
         contents:
         - text: assemble_manifest
           href: reference/hooks.qmd#assemble_manifest
-        - text: is_gated
-          href: reference/hooks.qmd#is_gated
-        - text: load_policy
-          href: reference/hooks.qmd#load_policy
-        - text: recent_activity
-          href: reference/hooks.qmd#recent_activity
+        - text: harness_audience
+          href: reference/hooks.qmd#harness_audience
         - text: run_hook
           href: reference/hooks.qmd#run_hook
         - text: transcript_blocks
@@ -72,6 +70,8 @@ website:
       - section: cli
         href: reference/cli.qmd
         contents:
+        - text: cmd_allow_authenticator
+          href: reference/cli.qmd#cmd_allow_authenticator
         - text: default_kid
           href: reference/cli.qmd#default_kid
         - text: passkey_kid

@@ -27,9 +27,9 @@ as good as the classifier's ability to tell it apart from a fake, which is why C
 
 A harness whose classifier has no such channel is one where SIB can report but not inform the
 decision. The verifier still runs and the manifest still records who signed what, which is worth
-having for the audit trail, but nothing binds the classifier to it. Getting past that is what the
-[Codex](#codex) plan is for, and what the untested in-process Agent SDK path below might offer
-without a patch.
+having for the audit trail, but nothing binds the classifier to it. [Codex](codex.qmd) gets past
+that without a patch, by letting the decision-maker fetch the evidence instead of being handed it;
+the untested in-process Agent SDK path below might be a second way.
 
 
 ## What the Library Exposes
@@ -102,36 +102,14 @@ from parsing model output.
 
 ## Codex
 
-Codex CLI is the planned second harness (Phase 4) and the one where a manifest can reach a
-pre-existing auto-approver. What is known from the Phase 0 feasibility check:
+Codex is integrated and documented on its own page: [Codex](codex.qmd). It is the one harness
+where the third step above is already satisfied without a patch, because its approval reviewer is
+an agent that can run the verifier itself and already scores `user_authorization` as an input. No
+hooks, no change to Codex, and the only workaround is pinning the reviewer prompt template around
+[openai/codex#50309](https://github.com/openai/codex/issues/50309).
 
-- Codex ships an LLM auto-reviewer, `approvals_reviewer = "auto_review"`, that receives
-  escalations which would otherwise go to the human and returns approve, deny or escalate. It runs
-  headless under `codex exec --approve-for-me` with the ChatGPT login.
-
-- The `workspace-write` sandbox is a real boundary. A network call to the release service, or a
-  write outside the workspace and the temp directories, is an escalation the reviewer must judge,
-  whatever command shape reached it. That boundary, not a command pattern, is what decides which
-  actions reach the reviewer: Codex's execpolicy rules are prefix matches, with the
-  alternative-invocation gap any pattern match has.
-
-- Project hooks in `.codex/hooks.json` fire under `codex exec` with
-  `--dangerously-bypass-hook-trust`, and their `PreToolUse` input has the same shape as Claude
-  Code's.
-
-- The reviewer's request is a structured prompt with sections for evidence handling, user
-  authorization scoring, a risk taxonomy and a security policy, a numbered transcript block of user
-  and assistant messages and tool calls, and an "APPROVAL REQUEST" JSON block. Its output has
-  `risk_level`, `user_authorization`, `outcome` and `rationale`. A manifest is a natural extra block
-  next to the approval request.
-
-- Baseline there: an injected pre-authorization in `AGENTS.md` or the runbook was approved by the
-  reviewer in 20 of 20 runs.
-
-The plan is to patch the reviewer's context assembly so the manifest arrives as a structured field,
-behind a feature-flagged reviewer variant. That is the channel the third step asks for, and Codex
-is open source, so it can be demonstrated rather than requested. It is not implemented yet; the
-scenario runner can already drive Codex headless (`--harness codex`) for baselines.
+Earlier phases planned to patch the reviewer's context assembly so a manifest arrived as a
+structured field. That turned out to be unnecessary.
 
 
 ## Claude Agent SDK

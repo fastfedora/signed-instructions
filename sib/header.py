@@ -31,7 +31,7 @@ class Header:
     canon: str
     iss: str
     iat: str
-    exp: str
+    exp: str | None        # RFC 7519 4.1.4: optional. Absent means valid until removed.
     jti: str
     mode: str
     aud: str | None = None
@@ -45,7 +45,7 @@ class Header:
 
     def to_dict(self) -> dict:
         d = asdict(self)
-        for k in ("aud", *WEBAUTHN_FIELDS):
+        for k in ("exp", "aud", *WEBAUTHN_FIELDS):
             if d[k] is None:
                 del d[k]
         return d
@@ -65,7 +65,7 @@ class Header:
     def from_dict(cls, d: dict) -> "Header":
         if not isinstance(d, dict):
             raise MalformedHeader("header is not an object")
-        required = ("alg", "kid", "canon", "iss", "iat", "exp", "jti", "mode")
+        required = ("alg", "kid", "canon", "iss", "iat", "jti", "mode")
         missing = [k for k in required if k not in d]
         if missing:
             raise MalformedHeader(f"missing header fields: {', '.join(missing)}")
@@ -77,8 +77,9 @@ class Header:
             raise MalformedHeader(f"unsupported alg {d['alg']!r}")
         if d["mode"] not in MODES:
             raise MalformedHeader(f"unsupported mode {d['mode']!r}")
-        for k in ("iat", "exp"):
-            parse_time(d[k])  # raises MalformedHeader
+        parse_time(d["iat"])                      # raises MalformedHeader
+        if d.get("exp") is not None:
+            parse_time(d["exp"])
         present = [k for k in WEBAUTHN_FIELDS if k in d]
         if d["alg"] == "ES256-webauthn":
             if len(present) != len(WEBAUTHN_FIELDS):
@@ -89,7 +90,7 @@ class Header:
             raise MalformedHeader(f"{', '.join(present)} only valid with alg ES256-webauthn")
         known = {"alg", "kid", "canon", "iss", "iat", "exp", "jti", "mode", "aud", "typ", "b64", "crit", *WEBAUTHN_FIELDS}
         extra = {k: v for k, v in d.items() if k not in known}
-        h = cls(alg=d["alg"], kid=d["kid"], canon=d["canon"], iss=d["iss"], iat=d["iat"], exp=d["exp"],
+        h = cls(alg=d["alg"], kid=d["kid"], canon=d["canon"], iss=d["iss"], iat=d["iat"], exp=d.get("exp"),
                 jti=d["jti"], mode=d["mode"], aud=d.get("aud"), typ=d["typ"], b64=False, crit=list(d["crit"]),
                 credentialId=d.get("credentialId"), authenticatorData=d.get("authenticatorData"),
                 clientDataJSON=d.get("clientDataJSON"))

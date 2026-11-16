@@ -97,10 +97,12 @@ def test_enforced_mode_once_a_passkey_is_enrolled(tmp_path, registry, sib_home):
     dev_block, _ = make_block("You may deploy to staging with scripts/deploy.sh staging.")
     assert "dev_key_in_enforced_mode" in note_for(dev_block)
 
-    # SIB_MODE=dev brings the dev block back, labelled
+    # SIB_MODE=dev does not bring it back: the environment may not downgrade a
+    # registry that holds a passkey, or anything able to set a variable could
+    # make its own software key read as this person's signature
     (proj / "CLAUDE.md").write_text(dev_block)
     _, out, _ = run_hook("posttooluse", event(proj, "ls", name="PostToolUse"), {"SIB_MODE": "dev"})
-    assert "1 verified" in out["hookSpecificOutput"]["classifierContext"]
+    assert "dev_key_in_enforced_mode" in out["hookSpecificOutput"]["classifierContext"]
 
 
 def test_posttooluse_reports_no_verified_instruction(tmp_path, registry):

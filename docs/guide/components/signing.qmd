@@ -16,16 +16,66 @@ starts a small web app on `http://localhost:7391`. It opens the sign page in the
 and waits:
 
 ![The sign page: the canonical text in a monospace box, the signer, key, expiry, audience and
-nonce, and one button.](../../project/plans/findings/images/phase-2/sign-before.png){width=80%}
+nonce, what will be done with the signed block, the confirmation code, and the Sign and Cancel
+buttons.](../../project/plans/findings/images/phase-2/sign-before.png){width=80%}
 
-The page shows the canonical instruction, the signer, the key, the expiry, the audience and the
-nonce, and nothing else. That is the what-you-see-is-what-you-sign surface. The button calls
+The page shows the canonical instruction, the signer, the key, the expiry, the audience, the nonce
+and what the command will do with the signed block — appending to a named file, writing one,
+or printing to standard output — and nothing else. That is the what-you-see-is-what-you-sign
+surface. The destination is one of the terms because what a block authorizes is decided by the file
+an agent reads it from: the same words appended to a repository's `AGENTS.md` and printed to
+standard output grant different things. The Sign button calls
 `navigator.credentials.get` with `userVerification: "required"` and a challenge computed by the
 command before the page opened:
 
 ```text
 challenge = SHA-256( BASE64URL(signing header) || "." || canonical instruction )
 ```
+
+### Confirmation code
+
+The terminal also prints a six-digit code, derived from that same challenge, and the sign page
+shows it. They must match.
+
+The code exists because the ceremony cannot prove its own provenance. The page is served from
+`http://localhost:7391`, an origin any process on the machine can take, and the key's enrolled
+origin is that string; and WebAuthn passes the challenge to the authenticator as opaque bytes, so
+the prompt the signer sees names the relying party and never the instruction. Nothing in the
+ceremony therefore distinguishes a page SIB served from a page something else served, which means a
+local process can ask for an assertion over text of its own choosing at a moment the signer is
+expecting to be asked — and the resulting block verifies, because it is the signer's real passkey
+and their real biometric over a well-formed header.
+
+The one channel such a process does not hold is the terminal the signer typed `sib sign` into. The
+code carries that channel into the browser: a page showing a different code, or no code, is not the
+ceremony that terminal started. Comparing it is the signer's job, as with an SSH host key.
+Standard WebAuthn has no transaction confirmation — the `txAuthSimple` extension was dropped and
+nothing replaced it for this case — so there is no cryptographic substitute. The full analysis is
+under [Signing Rests on the Terminal, Not the
+Ceremony](../deep-dives/design-decisions.qmd#signing-rests-on-the-terminal-not-the-ceremony).
+
+#### When the terminal is not in front of the signer
+
+The code is a real defence only for a signer who can see both sides of it. A command run through an
+agent harness's shell escape prints to output the harness captures and may not show until the
+command has finished, so the comparison can be impossible to make in practice even though the code
+was printed. What survives there is what-you-see-is-what-you-sign on the page itself: the full
+terms, the destination included, and an authenticator that still has to verify the user. What is
+lost is the provenance check — the signer is trusting that the page in front of them is the one
+their own command opened.
+
+### Declining
+
+Cancel ends the command at once: the page posts the request's abort endpoint, `sib sign` reports
+that the browser declined, and nothing is written. Closing the page does the same, through a
+`pagehide` beacon to that endpoint — a closed tab is the most natural way to say no, so it means
+no rather than leaving the command to wait out its timeout. Dismissing the authenticator's own
+prompt after pressing Sign is a third route to the same place, since the browser's exception is
+reported the same way.
+
+The guard is one-way. Once an assertion has come back the request token is spent, so a tab closed
+after a successful signature cannot retract it; the beacon is suppressed by the page and refused by
+the endpoint.
 
 The signing header is the block's header without the three assertion fields described below,
 because they are not known until the authenticator has signed. The browser prompts for Touch ID
@@ -189,18 +239,29 @@ User verification is not biometric verification
 
 The allowlist is policy
 : To narrow the gap, the verifier accepts only authenticators whose AAGUID is on a list of
-  models known to verify users biometrically (`sib.keys_webauthn.DEFAULT_ALLOWED_AAGUIDS`: iCloud
-  Keychain and Chrome on macOS, Windows Hello, the YubiKey Bio series). A registry can add
-  entries under `allowed_aaguids`. The list was compiled from the public passkey AAGUID
-  list and should be checked against it before an enforced deployment relies on it. It is only
-  as strong as the attestation behind the AAGUID: an authenticator with attestation `none` can
-  report any AAGUID it likes. The all-zero AAGUID, which Apple's `apple` attestation reports, is
+  models known to verify users biometrically (`sib.keys_webauthn.DEFAULT_ALLOWED_AAGUIDS`: Apple
+  Passwords, iCloud Keychain (Managed), Chrome on Mac, Windows Hello, and every YubiKey Bio
+  model). A registry adds entries under `allowed_aaguids`, or with
+  [`sib allow-authenticator`](../basics/cli.qmd#allow-authenticator). The list was audited on
+  19 October 2026 against `passkeydeveloper/passkey-authenticator-aaguids`, whose `aaguid.json`
+  names the platform providers and whose FIDO MDS derived `combined_aaguid.json` names the
+  hardware models; re-audit before an enforced deployment relies on it, because vendors add
+  models and rename them. It is only as strong as the attestation behind the AAGUID: an
+  authenticator with attestation `none` can report any AAGUID it likes. The all-zero AAGUID, which Apple's `apple` attestation reports, is
   accepted only for a key whose attestation was verified, since many authenticators zero the
   field under attestation `none`.
 
 Passkeys sync
 : An iCloud Keychain passkey exists on every device signed in to the signer's Apple account. The
   key is hardware-bound on each of them, but "the key is on one laptop" does not hold.
+
+A password manager may answer instead
+: A manager's browser extension can capture the WebAuthn prompt and create the passkey in its own
+  vault rather than the platform authenticator. The credential is then a synced secret in software,
+  bound to no device, and it reports its own AAGUID with attestation `none`. Such models are
+  deliberately absent from the default allowlist, so enrollment succeeds and both signing and
+  verification then fail with `authenticator_not_allowed`, naming the AAGUID. `--browser` selects a
+  browser whose prompt the platform answers; `sib allow-authenticator` accepts one on purpose.
 
 If the allowlist is judged insufficient, the options are enterprise attestation to pin
 authenticator models, or a Secure Enclave key created with a biometry-only access-control flag
@@ -262,9 +323,12 @@ is not on the built-in list.
 
 `SIB_BROWSER`
 : The browser to open the enroll and sign pages in: a name the Python `webbrowser` module knows
-  (`safari`, `chrome`, `firefox`) or a command the URL is appended to (`open -a Safari`). Unset,
-  the system default browser opens the page. `--browser` on `sib enroll` and `sib sign` overrides
-  it for one command. Use it when the default browser has no passkey support, or when a password
+  (`safari`, `chrome`, `firefox`). Unset, the system default browser opens the page. It may not
+  name a command to run with the URL appended; only `--browser` may do that, because the variable
+  is settable by anything that can write a line into a shell startup file, and the browser is
+  where the signer reads what they are about to approve. `--browser` on `sib enroll` and
+  `sib sign` overrides it for one command and does accept a command (`open -a Safari`).
+  Use it when the default browser has no passkey support, or when a password
   manager's extension captures the passkey prompt (1Password, for instance, creates the passkey in
   its own vault, which is not on the biometric-capable allowlist).
 

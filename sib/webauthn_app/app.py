@@ -129,7 +129,9 @@ def create_app(state: AppState, origin: str) -> FastAPI:
         p = state.get(token, "sign")
         h = p.payload["header"]
         return pages.sign_page(token, {"signer": h.iss, "kid": h.kid, "exp": h.exp, "aud": h.aud, "jti": h.jti,
-                                       "ctext": p.payload["ctext"]})
+                                       "ctext": p.payload["ctext"],
+                                       "action": p.payload.get("action") or "",
+                                       "code": keys_webauthn.code_for_challenge(p.challenge)})
 
     @app.post("/api/sign/{token}/options")
     def sign_options(token: str):
