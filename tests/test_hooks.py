@@ -66,6 +66,43 @@ def test_userprompt_stores_blocks(tmp_path, registry, sib_home):
 
 
 
+def test_enforced_mode_once_a_passkey_is_enrolled(tmp_path, registry, sib_home):
+    """Phase 2 behaviour, now observed through the note rather than a decision."""
+    from tests.fake_authenticator import FakeAuthenticator, enroll_fake, make_webauthn_block
+    from sib.registry import Registry
+    auth = FakeAuthenticator()
+    reg = Registry()
+    enroll_fake(reg, auth, ALICE, "alice@example.com#passkey-1")
+    reg.save()
+    assert "SIB_MODE" not in os.environ
+
+    def note_for(block):
+        (tmp_path / "proj" / "CLAUDE.md").write_text(block)
+        _, out, _ = run_hook("posttooluse", event(tmp_path / "proj", "ls", name="PostToolUse"))
+        return out["hookSpecificOutput"]["classifierContext"]
+
+    block, _ = make_webauthn_block(auth, "You may deploy to staging with scripts/deploy.sh staging.",
+                                   kid="alice@example.com#passkey-1", signer=ALICE)
+    proj = project(tmp_path, "# proj\n\n" + block + "\n")
+    _, out, _ = run_hook("posttooluse", event(proj, "ls", name="PostToolUse"))
+    assert "1 verified" in out["hookSpecificOutput"]["classifierContext"]
+    m = json.loads((sib_home / "sessions" / "s1" / "manifest.json").read_text())
+    assert m["mode"] == "enforced" and m["verified_span_ids"] == ["sib-1"]
+    assert m["spans"][0]["alg"] == "ES256-webauthn" and m["spans"][0]["attestation_verified"] is False
+
+    # the UV flag cleared, a dev key in enforced mode: both named, neither verified
+    block, _ = make_webauthn_block(auth, "You may deploy to staging with scripts/deploy.sh staging.",
+                                   kid="alice@example.com#passkey-1", signer=ALICE, uv=False)
+    assert "uv_not_performed" in note_for(block)
+    dev_block, _ = make_block("You may deploy to staging with scripts/deploy.sh staging.")
+    assert "dev_key_in_enforced_mode" in note_for(dev_block)
+
+    # SIB_MODE=dev brings the dev block back, labelled
+    (proj / "CLAUDE.md").write_text(dev_block)
+    _, out, _ = run_hook("posttooluse", event(proj, "ls", name="PostToolUse"), {"SIB_MODE": "dev"})
+    assert "1 verified" in out["hookSpecificOutput"]["classifierContext"]
+
+
 def test_posttooluse_reports_no_verified_instruction(tmp_path, registry):
     proj = project(tmp_path, "# proj\nnothing signed here\n")
     rc, out, err = run_hook("posttooluse", event(proj, "ls", name="PostToolUse"))

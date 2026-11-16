@@ -107,7 +107,9 @@ def test_malformed_variants(block_factory, registry):
 
 
 def test_every_status_is_reachable():
+    """The EdDSA path reaches these; test_webauthn.py covers the four ES256-webauthn statuses."""
     covered = {"verified", "invalid_signature", "unknown_signer", "unknown_key", "expired", "not_yet_valid",
                "audience_mismatch", "metadata_mismatch", "malformed", "nonce_replayed", "revoked",
                "dev_key_in_enforced_mode"}
-    assert covered == set(STATUSES)
+    webauthn_only = {"origin_not_allowed", "rp_id_mismatch", "uv_not_performed", "authenticator_not_allowed"}
+    assert covered | webauthn_only == set(STATUSES)

@@ -1,0 +1,280 @@
+---
+title: Biometric Signing
+---
+
+In enforced mode a block is signed by a passkey: a WebAuthn credential whose private key lives in
+the signer's authenticator (the Secure Enclave behind Touch ID, Windows Hello, a YubiKey Bio) and
+which signs only after the authenticator has verified the user. This page covers how a passkey is
+enrolled and bound to a signer, how a block is signed with it, what the registry attests about the
+key, and what a signature does not prove.
+
+
+## How Signing Works
+
+`sib sign` with a passkey enrolled builds the header, prints the canonical text and the terms, and
+starts a small web app on `http://localhost:7391`. It opens the sign page in the default browser
+and waits:
+
+![The sign page: the canonical text in a monospace box, the signer, key, expiry, audience and
+nonce, and one button.](../../project/plans/findings/images/phase-2/sign-before.png){width=80%}
+
+The page shows the canonical instruction, the signer, the key, the expiry, the audience and the
+nonce, and nothing else. That is the what-you-see-is-what-you-sign surface. The button calls
+`navigator.credentials.get` with `userVerification: "required"` and a challenge computed by the
+command before the page opened:
+
+```text
+challenge = SHA-256( BASE64URL(signing header) || "." || canonical instruction )
+```
+
+The signing header is the block's header without the three assertion fields described below,
+because they are not known until the authenticator has signed. The browser prompts for Touch ID
+(or the platform's equivalent), the authenticator signs, and the page posts the assertion back to
+the command. The command runs the [verifier](verifier.qmd) over the result and writes the block
+only when the status is `verified`; a failing status is printed instead, and no block is written.
+
+```bash
+sib sign --signer alice@example.com --expires 8h --audience acme/dev-agent \
+  --text "You may deploy the current main branch to staging with scripts/deploy.sh staging whenever the test suite passes." \
+  --out block.txt
+```
+
+```text
+About to sign (canonical form):
+  You may deploy the current main branch to staging with scripts/deploy.sh staging whenever the test suite passes.
+  signer=alice@example.com kid=alice@example.com#passkey-9188 expires=2026-10-05T19:45:21Z audience=acme/dev-agent canon=text/1 mode=enforced
+Opening http://localhost:7391/sign/xVOorN3_EUxrNGbBsgSAOAA7dRAzbTaD
+signed with alice@example.com#passkey-9188 in 0.5 s
+wrote block.txt
+```
+
+The resulting block has `alg: ES256-webauthn` and `mode: enforced` in its header, and carries the
+assertion in three header fields: `credentialId`, `authenticatorData` and `clientDataJSON`, all
+base64url. The signature segment is the ECDSA P-256 signature the authenticator returned, which
+covers `authenticatorData` and the hash of `clientDataJSON`; `clientDataJSON` carries the
+challenge, which is the hash of the header and the instruction. That is the chain from the
+signer's fingerprint to the text. The [Block Format](../../spec/format.qmd#webauthn-assertion)
+page has a complete example.
+
+Every signing request has a one-time token in its URL. The page works once, for the payload the
+command created; a stale tab cannot sign a different payload.
+
+::: {.callout-note}
+A passkey-signed block needs an audience. Enforced-mode verifiers refuse a block with no `aud`,
+so `sib sign` refuses to create one.
+:::
+
+
+## Enrollment
+
+Enrollment binds a passkey to a signer id:
+
+```bash
+sib enroll --signer alice@example.com
+```
+
+The command opens the enroll page, which calls `navigator.credentials.create` with user
+verification required, a platform authenticator requested, a discoverable credential preferred
+and `attestation: "direct"`:
+
+![The enroll page after a successful enrollment, reporting the authenticator and the attestation
+result.](../../project/plans/findings/images/phase-2/enroll-after.png){width=80%}
+
+The response is verified with [py_webauthn](https://github.com/duo-labs/py_webauthn): the
+challenge, the origin and the RP ID must match, the user must have been verified, and the
+attestation statement is checked as far as a root certificate allows (next section). Only ES256
+credentials are offered to the authenticator, since that is the algorithm `ES256-webauthn`
+names. The command then writes the registry entry and prints what it recorded:
+
+```text
+enrolled alice@example.com#passkey-9188 for alice@example.com in /Users/alice/.sib/registry.json (enforced mode, authenticator 01020304-0506-0708-0102-030405060708, attestation packed not verified)
+warning: authenticator 01020304-0506-0708-0102-030405060708 is not on the biometric-capable allowlist; blocks signed with alice@example.com#passkey-9188 fail with authenticator_not_allowed until it is added under allowed_aaguids in /Users/alice/.sib/registry.json
+attestation_verified=false: the AAGUID is the authenticator's own claim; hardware backing is an enrollment assumption for this key
+```
+
+The key id follows the convention `<signer>#passkey-<first two bytes of the credential id>`;
+`--kid` overrides it. Each enrollment uses a fresh WebAuthn user handle, because an authenticator
+that sees a user handle it already holds for this site replaces the earlier passkey, which would
+orphan the key enrolled under the earlier `kid`. Credentials already enrolled for the signer are
+excluded, so the same authenticator is not enrolled twice.
+
+Two environment variables shape enrollment:
+
+`SIB_REQUIRE_ATTESTATION`
+: When set to `1`, an enrollment whose attestation cannot be verified is refused. Off by default:
+  Apple passkeys usually carry no attestation, and the demo accepts them and says so.
+
+`SIB_ATTESTATION_ROOTS`
+: A directory of PEM root certificates. Attestation statements in the `packed`, `tpm` and
+  `fido-u2f` formats are chained to these roots; without them, a chain in those formats is
+  recorded but counts as unverified. Apple's WebAuthn root is bundled, so the `apple` format
+  needs nothing here.
+
+
+## What the Registry Attests
+
+The entry for a passkey:
+
+```json
+{
+  "kid": "alice@example.com#passkey-9188",
+  "alg": "ES256-webauthn",
+  "public_key": "pQECAyYgASFYIAme6lzACHBimeQ_-XoqnWCJGkWnolTu63bWExx4t1mZIlggf_dOOJAncBQ8B9jE1koWCovF_qJejGQv_fBEm2QL1oY",
+  "mode": "enforced",
+  "enrolled_at": "2026-10-05T11:45:20Z",
+  "attestation_verified": false,
+  "attestation": {"format": "packed", "x5c_present": true, "roots": null},
+  "revoked": false,
+  "credential_id": "kYjC6VVDjNGdsK9jHcPPariB-AUWC8KDxWLVH-Vp9p4",
+  "aaguid": "01020304-0506-0708-0102-030405060708",
+  "sign_count": 1,
+  "origins": ["http://localhost:7391"],
+  "rp_id": "localhost",
+  "user_verified_at_enrollment": true,
+  "transports": ["internal"]
+}
+```
+
+Each field answers a different question, and they do not all carry the same weight:
+
+`public_key`, `credential_id`
+: What the verifier needs: the COSE-encoded P-256 public key and the credential the assertion
+  must come from. These are cryptographically bound to every signature.
+
+`attestation_verified`
+: `true` only when the attestation statement carried a certificate chain and a root for its
+  format was available to check it against. Then the authenticator's make and model are vouched
+  for by its vendor. `false` means the AAGUID below is the authenticator's own claim: with
+  attestation `none` (what iCloud Keychain passkeys return) or a chain with no configured root,
+  the WebAuthn specification gives no provenance guarantee. The manifest carries this flag on
+  every span so a classifier policy can require it.
+
+`aaguid`
+: The authenticator model identifier. Policy input for the allowlist below; proof of nothing by
+  itself.
+
+`origins`, `rp_id`
+: Where the key may be used. An assertion made on another web origin, or for another RP ID, is
+  refused. A block signed on one laptop verifies elsewhere only if the verifier's registry entry
+  lists that origin; the Phase 3 specification revisits this.
+
+`sign_count`
+: The authenticator's signature counter at enrollment. Recorded, not enforced: Apple passkeys
+  report zero and never increment it.
+
+`user_verified_at_enrollment`, `uvm`
+: Whether the UV flag was set when the passkey was created, and the user-verification-method
+  extension result when the browser supplied one. Most browsers do not.
+
+::: {.callout-warning}
+The registry proves possession of a key by whoever enrolled it under a signer id. It does not
+prove that the signer id belongs to the person at the keyboard; that binding is an enrollment
+procedure (someone checks the id before running `sib enroll`), and the external directory that
+would make it auditable is out of scope.
+:::
+
+
+## What User Verification Does Not Prove
+
+The verifier requires the assertion's UV flag, so a block is never produced without the
+authenticator verifying the user. Three limits remain, and they are stated here rather than
+hidden:
+
+User verification is not biometric verification
+: WebAuthn's UV flag is set by a PIN or a password as readily as by a fingerprint. On macOS,
+  after a few failed Touch ID attempts the system offers the login password, and the resulting
+  assertion is indistinguishable. No field in the assertion names the method; the `uvm`
+  extension that would is poorly supported. The project plan's requirement SG-2 asks for
+  biometric verification specifically, and the assertion cannot deliver it.
+
+The allowlist is policy
+: To narrow the gap, the verifier accepts only authenticators whose AAGUID is on a list of
+  models known to verify users biometrically (`sib.keys_webauthn.DEFAULT_ALLOWED_AAGUIDS`: iCloud
+  Keychain and Chrome on macOS, Windows Hello, the YubiKey Bio series). A registry can add
+  entries under `allowed_aaguids`. The list was compiled from the public passkey AAGUID
+  list and should be checked against it before an enforced deployment relies on it. It is only
+  as strong as the attestation behind the AAGUID: an authenticator with attestation `none` can
+  report any AAGUID it likes. The all-zero AAGUID, which Apple's `apple` attestation reports, is
+  accepted only for a key whose attestation was verified, since many authenticators zero the
+  field under attestation `none`.
+
+Passkeys sync
+: An iCloud Keychain passkey exists on every device signed in to the signer's Apple account. The
+  key is hardware-bound on each of them, but "the key is on one laptop" does not hold.
+
+If the allowlist is judged insufficient, the options are enterprise attestation to pin
+authenticator models, or a Secure Enclave key created with a biometry-only access-control flag
+through a small native helper, which is macOS-only. Both are raised as specification questions
+for Phase 3. The [threat model](../deep-dives/threat-model.qmd) carries the residual gap.
+
+A browser with `userVerification: "required"` will not return an assertion with UV clear; it
+fails the ceremony instead. The `uv_not_performed` status therefore catches a crafted assertion
+presented directly to the verifier, not a browser flow, and that is what the tests and the
+conformance vectors exercise.
+
+
+## Enforced Mode
+
+Once any passkey is enrolled in the registry, the verifier's default mode is `enforced`:
+`sib verify`, the hooks and the manifest all switch without configuration. In enforced mode:
+
+- A dev-mode block or key is `dev_key_in_enforced_mode` and confers nothing.
+
+- A block with no audience is `audience_mismatch`.
+
+- No dev-mode warning prints.
+
+`SIB_MODE=dev` overrides the default; both paths then verify and the warning prints on every
+operation. `SIB_MODE=enforced` forces enforced mode before a passkey exists. `sib sign --dev`
+signs with a dev key even when a passkey is enrolled, and `sib verify --dev` verifies in dev mode.
+
+
+## Recording a Real Assertion for the Tests
+
+The test suite signs with a software authenticator so every path runs in CI. One test,
+`test_recorded_real_assertion`, checks a block signed by a real passkey and is skipped until the
+fixture exists. To record one on a laptop with Touch ID:
+
+1. Enroll and sign as above, into a scratch `SIB_HOME`, writing the block to `block.txt`.
+
+2. Write `tests/fixtures/webauthn/real_assertion.json`:
+
+   ```json
+   {
+     "block": "<the contents of block.txt>",
+     "registry": <the contents of $SIB_HOME/registry.json>,
+     "now": "<an RFC 3339 UTC time inside the block's validity window>",
+     "audience": "acme/dev-agent",
+     "tamper": ["to staging", "to production"]
+   }
+   ```
+
+   `tamper` names a substitution the test applies to the block, which must then fail with
+   `invalid_signature`.
+
+3. Run `just test`; the test now runs.
+
+The registry in the fixture must list the authenticator's AAGUID under `allowed_aaguids` when it
+is not on the built-in list.
+
+
+## Environment
+
+`SIB_BROWSER`
+: The browser to open the enroll and sign pages in: a name the Python `webbrowser` module knows
+  (`safari`, `chrome`, `firefox`) or a command the URL is appended to (`open -a Safari`). Unset,
+  the system default browser opens the page. `--browser` on `sib enroll` and `sib sign` overrides
+  it for one command. Use it when the default browser has no passkey support, or when a password
+  manager's extension captures the passkey prompt (1Password, for instance, creates the passkey in
+  its own vault, which is not on the biometric-capable allowlist).
+
+`SIB_WEBAUTHN_PORT`
+: The port of the local app (default `7391`). The origin `http://localhost:<port>` is recorded
+  in the registry at enrollment, so a key enrolled on one port verifies assertions from that port
+  only.
+
+`SIB_REQUIRE_ATTESTATION`, `SIB_ATTESTATION_ROOTS`
+: See [Enrollment](#enrollment).
+
+`SIB_MODE`
+: See [Enforced Mode](#enforced-mode).

@@ -21,7 +21,9 @@ Audience
 : The identifier of the harness performing the verification, or none.
 
 Registry
-: The mapping from `kid` to signer, algorithm, public key, mode and revocation flag.
+: The mapping from `kid` to signer, algorithm, public key, mode and revocation flag, and for a
+  WebAuthn key its credential id, enrolled origins, RP ID, AAGUID and attestation record; plus
+  the allowlist of biometric-capable authenticators by AAGUID.
 
 Nonce store
 : The record of `jti` values already honored, keyed by audience. Phase 1 ships a store that
@@ -41,7 +43,9 @@ Each step names the status produced when it fails. The first failing step decide
 2. Decode the first part as base64url JSON. If it does not decode, if `typ` is not `SIB/1`, if
    `b64` is not `false`, if `crit` does not contain `b64`, if `alg` or `mode` is outside its
    closed list, if a required field is missing, or if `iat` or `exp` is not an RFC 3339 UTC
-   timestamp, the result is `malformed`.
+   timestamp, the result is `malformed`. If `alg` is `ES256-webauthn` and any of `credentialId`,
+   `authenticatorData` or `clientDataJSON` is missing or empty, or if `alg` is not
+   `ES256-webauthn` and any of them is present, the result is `malformed`.
 
 3. Canonicalize the instruction segment with the rule in `canon`. If the rule is unknown, the
    result is `malformed`.
@@ -50,14 +54,44 @@ Each step names the status produced when it fails. The first failing step decide
    `unknown_signer`. If it is absent and `iss` is known, the result is `unknown_key`.
 
 5. If the registry entry belongs to a signer other than `iss`, or its algorithm differs from
-   `alg`, the result is `unknown_key`.
+   `alg`, the result is `unknown_key`. If `alg` is `ES256-webauthn` and `credentialId` differs
+   from the entry's credential id, the result is `unknown_key`.
 
 6. If the verifier is in `enforced` mode and either the header `mode` or the key's mode is
    `dev`, the result is `dev_key_in_enforced_mode`.
 
-7. Compute the signing input from the first part and the canonical instruction. Verify the third
-   part with the primitive named by `alg` and the registry public key. If verification fails, the
-   result is `invalid_signature`.
+7. Verify the signature with the primitive named by `alg`.
+
+   For `EdDSA`: compute the signing input from the first part and the canonical instruction and
+   verify the third part with the registry public key. If verification fails, the result is
+   `invalid_signature`.
+
+   For `ES256-webauthn`, in this order:
+
+   a. Decode `clientDataJSON` and `authenticatorData`. If either does not decode, if
+      `clientDataJSON.type` is not `webauthn.get`, or if `authenticatorData` is shorter than 37
+      bytes, the result is `malformed`.
+
+   b. Compute the [challenge](format.qmd#webauthn-assertion): the base64url encoding of the
+      SHA-256 of the signing input over the header with the three assertion fields removed. If
+      `clientDataJSON.challenge` differs, the result is `invalid_signature`.
+
+   c. If `clientDataJSON.origin` is not among the origins enrolled for the key, the result is
+      `origin_not_allowed`.
+
+   d. If the first 32 bytes of `authenticatorData` are not the SHA-256 of the RP ID enrolled for
+      the key, the result is `rp_id_mismatch`.
+
+   e. If the UP (user present) flag or the UV (user verified) flag of `authenticatorData` is
+      clear, the result is `uv_not_performed`.
+
+   f. If the AAGUID recorded for the key at enrollment is not on the registry's allowlist, the
+      result is `authenticator_not_allowed`. The all-zero AAGUID is on the allowlist only for a
+      key whose enrollment attestation was verified.
+
+   g. Verify the third part as an ECDSA P-256 signature with SHA-256, in the ASN.1 DER form the
+      authenticator returned, over `authenticatorData ‖ SHA-256(clientDataJSON)` with the
+      registry public key. If verification fails, the result is `invalid_signature`.
 
 8. Compare each recognized clear metadata line with the header (`Signer` with `iss`, `Expires`
    with `exp`, `Audience` with `aud`). If any differs, the result is `metadata_mismatch`.
@@ -77,7 +111,7 @@ Each step names the status produced when it fails. The first failing step decide
 
 14. The result is `verified`.
 
-A verifier MUST run the steps in this order. Steps 9 to 13 run only on a block whose signature
+A verifier MUST run the steps in this order. Steps 8 to 13 run only on a block whose signature
 verified, so a failure there is a failure of a genuine block, and the manifest says so.
 
 
@@ -86,11 +120,15 @@ verified, so a failure there is a failure of a genuine block, and the manifest s
 | Status | Meaning |
 |---|---|
 | `verified` | Authorship, integrity and validity window all hold. The only status that confers authority. |
-| `malformed` | The block is not a well-formed SIB/1 block. Includes unknown `typ`, `alg` or `canon`. |
+| `malformed` | The block is not a well-formed SIB/1 block. Includes unknown `typ`, `alg` or `canon`, and a WebAuthn assertion that does not decode. |
 | `unknown_signer` | `iss` is not in the registry. |
-| `unknown_key` | `kid` is not enrolled for `iss`, or the entry's algorithm does not match. |
+| `unknown_key` | `kid` is not enrolled for `iss`, the entry's algorithm does not match, or the assertion's credential is not the one enrolled. |
 | `dev_key_in_enforced_mode` | A software key or a `dev` block presented to an enforced verifier. |
-| `invalid_signature` | The signature does not verify over the header and canonical instruction. The instruction or the header was changed after signing. |
+| `invalid_signature` | The signature does not verify over the header and canonical instruction. The instruction or the header was changed after signing. On the WebAuthn path, also a challenge that does not match. |
+| `origin_not_allowed` | The assertion was made on a web origin not enrolled for the key. |
+| `rp_id_mismatch` | The assertion's RP ID hash is not that of the enrolled RP ID. |
+| `uv_not_performed` | The authenticator did not verify the user (UV clear), or the user was not present (UP clear). |
+| `authenticator_not_allowed` | The key's authenticator model is not on the biometric-capable allowlist. |
 | `metadata_mismatch` | A clear metadata line disagrees with the signed header. |
 | `not_yet_valid` | `iat` is more than 60 seconds in the future. |
 | `expired` | `now` is at or after `exp`. |
@@ -113,7 +151,21 @@ Audience
 Dev keys
 : A key enrolled in `dev` mode, or a block whose header `mode` is `dev`, MUST be rejected by a
   verifier in `enforced` mode. A verifier in `dev` mode MUST emit a visible warning on every
-  operation and MUST label the manifest with `mode: dev`.
+  operation and MUST label the manifest with `mode: dev`. A verifier in `dev` mode MUST still
+  run every check of the WebAuthn path on an `ES256-webauthn` block.
+
+Mode default
+: A harness that does not set the mode MUST use `enforced` once any `ES256-webauthn` key is
+  enrolled in its registry, and MAY use `dev` before that.
+
+WebAuthn assertions
+: A verifier MUST require the UV flag; the UP flag alone proves only that something was touched.
+  A verifier MUST bind the assertion to the enrolled origin and RP ID. A verifier MUST NOT treat
+  the UV flag as proof that a biometric was used, and MUST NOT treat the AAGUID as proof of the
+  authenticator's hardware unless the key's attestation was verified at enrollment. The
+  allowlist is policy: a verifier MUST apply it and MUST report `attestation_verified` for the
+  key in the manifest so a classifier policy can require it. The signature counter MAY be
+  recorded and MUST NOT be enforced, since platform passkeys report zero.
 
 Replay
 : `jti` MUST be unique per block. The nonce store binds `(aud, jti)` to the first session that
@@ -128,6 +180,6 @@ Revocation
 
 Failing results
 : Every result other than `verified` MUST still carry the claims the block makes (`iss`, `kid`,
-  `iat`, `exp`, `aud`, `canon`, `mode`, the canonical text where the rule is known) and a short
-  error describing the failing step, so that a manifest consumer can name what it refuses. The
-  claims of a failing block are unverified and confer nothing.
+  `alg`, `iat`, `exp`, `aud`, `canon`, `mode`, the canonical text where the rule is known) and a
+  short error describing the failing step, so that a manifest consumer can name what it refuses.
+  The claims of a failing block are unverified and confer nothing.

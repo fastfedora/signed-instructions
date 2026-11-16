@@ -40,6 +40,8 @@ Span:
 | `issued_at`, `expires_at` | string or null | The block's `iat` and `exp` claims. |
 | `audience` | string or null | The block's `aud` claim. |
 | `jti` | string or null | The block's `jti` claim. |
+| `alg` | string or null | The block's `alg` claim. |
+| `attestation_verified` | boolean or null | From the registry entry for `kid`: whether the key's enrollment attestation was verified. Null when the key was not found. A classifier policy MAY require it. |
 | `error` | string or null | The failing step's description; null for `verified`. |
 | `origin` | object | Where the block was found. |
 
@@ -120,6 +122,8 @@ Produced by `sib verify --json` on the [example block](format.qmd#example):
       "expires_at": "2026-09-13T22:07:11Z",
       "audience": "acme/dev-agent",
       "jti": "EPC7vN_H0Vq_4EuH",
+      "alg": "EdDSA",
+      "attestation_verified": false,
       "error": null,
       "id": "sib-1",
       "origin": {
