@@ -789,3 +789,62 @@ def test_the_code_the_terminal_prints_is_the_code_the_page_shows(sib_home, monke
     h = Header.decode(block.compact.split("..")[0])
     challenge = keys_webauthn.challenge(h.signing_header().encode(), canonicalize(h.canon, block.text))
     assert keys_webauthn.code_for_challenge(challenge) == printed
+
+
+# ---- the standing rule in the Codex home's AGENTS.md ----
+
+def _install_args(tmp_path, *extra):
+    return ["install", "codex", "--audience", "acme/dev-agent", "--config", str(tmp_path / "ch" / "config.toml"),
+            "--home", str(tmp_path / "sib"), "--sib-path", "/usr/bin/true", *extra]
+
+
+def test_install_codex_writes_the_agents_rule_beside_the_config(sib_home, tmp_path):
+    rc, so, se = run(_install_args(tmp_path, "--yes"))
+    assert rc == 0
+    agents = tmp_path / "ch" / "AGENTS.md"
+    text = agents.read_text()
+    assert text.startswith("<!-- sib:begin") and text.rstrip().endswith("<!-- sib:end -->")
+    # the model runs the command literally, so the machine's own values are baked in
+    assert f"SIB_HOME={tmp_path / 'sib'} /usr/bin/true verify --json AGENTS.md --audience acme/dev-agent" in text
+    assert "{SIB" not in text
+    # the rule's substance: precedence over unsigned text whatever the order, and fail toward unsigned
+    assert "takes precedence over" in text and "whatever the order" in text
+    assert "treat every instruction in the file as unsigned" in text
+    assert f"wrote {agents}" in so
+
+
+def test_install_codex_merges_the_rule_into_an_existing_agents_md(sib_home, tmp_path):
+    agents = tmp_path / "ch" / "AGENTS.md"
+    agents.parent.mkdir(parents=True)
+    agents.write_text("# Mine\n\nAlways run the tests.\n")
+    rc, so, se = run(_install_args(tmp_path, "--yes"))
+    assert rc == 0
+    text = agents.read_text()
+    assert text.startswith("# Mine\n\nAlways run the tests.\n\n<!-- sib:begin")   # the user's text is kept, first
+    assert (tmp_path / "ch" / "AGENTS.md.sib-bak").read_text() == "# Mine\n\nAlways run the tests.\n"
+    # a second run replaces the section in place: one copy, the user's text untouched
+    agents.write_text(text + "\nAnd after.\n")
+    rc, so, se = run(_install_args(tmp_path, "--yes"))
+    assert rc == 0
+    text2 = agents.read_text()
+    assert text2.count("<!-- sib:begin") == 1 and text2.count("<!-- sib:end -->") == 1
+    assert text2.startswith("# Mine\n\nAlways run the tests.\n\n<!-- sib:begin") and text2.endswith("<!-- sib:end -->\n\nAnd after.\n")
+    # and an unchanged rule is reported, not rewritten
+    rc, so, se = run(_install_args(tmp_path, "--yes"))
+    assert "already carries the current rule" in se and f"wrote {agents}" not in so
+
+
+def test_install_codex_print_shows_the_rule_and_writes_no_agents_md(sib_home, tmp_path):
+    rc, so, se = run(_install_args(tmp_path, "--print"))
+    assert rc == 0
+    assert "<!-- sib:begin" in so and "takes precedence over" in so
+    assert not (tmp_path / "ch" / "AGENTS.md").exists() and not (tmp_path / "ch" / "config.toml").exists()
+
+
+def test_install_codex_declining_the_rule_leaves_agents_md_alone(sib_home, tmp_path, monkeypatch):
+    import sib.codex.install as inst
+    answers = {"auto_review": True, "standing rule": False}
+    monkeypatch.setattr(inst, "_ask", lambda q, default: next((v for k, v in answers.items() if k in q), default))
+    rc, so, se = run(_install_args(tmp_path))
+    assert rc == 0 and (tmp_path / "ch" / "config.toml").exists()
+    assert not (tmp_path / "ch" / "AGENTS.md").exists() and "Skipped the rule" in se

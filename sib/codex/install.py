@@ -7,6 +7,12 @@ Codex reviews escalated actions with an LLM subagent that scores
   auto_review.extra_policy               the SIB rules it reads
   auto_review.experimental_policy_template   a template with a slot to put them in
   a deployment or release rule           yours to write; see the closing note
+
+The reviewer only sees escalated tool calls, so a fifth piece goes to the
+model itself: a standing rule in the Codex home's AGENTS.md to verify blocks
+before following an instruction file and to let a verified block take
+precedence over unsigned text, whatever the order. That covers instructions
+that need no tool call, which the reviewer never sees.
 """
 from __future__ import annotations
 
@@ -17,7 +23,7 @@ import sys
 import tomllib
 from pathlib import Path
 
-from . import EXTRA_POLICY_PATH, TEMPLATE_PATH, TEMPLATE_SOURCE_COMMIT
+from . import AGENTS_RULE_PATH, EXTRA_POLICY_PATH, TEMPLATE_PATH, TEMPLATE_SOURCE_COMMIT
 from ..first_run import ask_yes_no, ensure_audience, ensure_key
 from ..keys_dev import sib_home
 from ..registry import Registry
@@ -65,6 +71,57 @@ def build_auto_review_lines(sib_path: str, home: Path, audience: str) -> list[st
 
 
 OUR_KEYS = ("experimental_policy_template", "extra_policy")
+
+# ---- the standing rule for the model, in the Codex home's AGENTS.md ----
+
+RULE_BEGIN = "<!-- sib:begin (written by `sib install codex`; edits inside are replaced on the next run) -->"
+RULE_END = "<!-- sib:end -->"
+
+
+def render_agents_rule(sib_path: str, home: Path, audience: str) -> str:
+    text = AGENTS_RULE_PATH.read_text()
+    return (text.replace("{SIB}", sib_path)
+                .replace("{SIB_HOME}", str(home))
+                .replace("{SIB_AUDIENCE}", audience))
+
+
+def merge_agents_rule(text: str, rule: str) -> str:
+    """Place the rule between its markers, replacing an earlier copy in place
+    and leaving everything else in the file alone."""
+    block = f"{RULE_BEGIN}\n{rule.rstrip()}\n{RULE_END}\n"
+    start, end = text.find(RULE_BEGIN), text.find(RULE_END)
+    if start != -1 and end != -1 and end > start:
+        end += len(RULE_END)
+        if text[end:end + 1] == "\n":
+            end += 1
+        return text[:start] + block + text[end:]
+    if not text:
+        return block
+    joiner = "" if text.endswith("\n\n") else ("\n" if text.endswith("\n") else "\n\n")
+    return text + joiner + block
+
+
+def install_agents_rule(target: Path, rule: str, assume_yes: bool) -> None:
+    text = target.read_text() if target.exists() else ""
+    merged = merge_agents_rule(text, rule)
+    if merged == text:
+        print(f"# {target} already carries the current rule.", file=sys.stderr)
+        return
+    present = RULE_BEGIN in text
+    if not (assume_yes or _ask(
+            f"{'Update' if present else 'Write'} the standing rule for the model in {target}? It tells "
+            f"Codex to verify signed blocks before following an instruction file, and to let a verified "
+            f"block take precedence over unsigned text.", default=True)):
+        print(f"# Skipped the rule. Without it, a later unsigned sentence in AGENTS.md overrides an earlier "
+              f"signed one for anything that needs no tool call.", file=sys.stderr)
+        return
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if text:
+        backup = target.with_suffix(target.suffix + ".sib-bak")
+        backup.write_text(text)
+        print(f"backed up {target} to {backup}", file=sys.stderr)
+    target.write_text(merged)
+    print(f"wrote {target}")
 
 
 def _section_span(text: str, header: str) -> tuple[int, int] | None:
@@ -185,6 +242,8 @@ def run_install(config: str | None = None, audience: str | None = None, sib_path
     lines = build_auto_review_lines(resolved_sib, resolved_home, audience)
     merged = merge(text, lines, reviewer)
 
+    rule = render_agents_rule(resolved_sib, resolved_home, audience)
+    agents_md = target.parent / "AGENTS.md"
     write = not print_only
     if write:
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -194,8 +253,10 @@ def run_install(config: str | None = None, audience: str | None = None, sib_path
             print(f"backed up {target} to {backup}", file=sys.stderr)
         target.write_text(merged)
         print(f"wrote {target}")
+        install_agents_rule(agents_md, rule, assume_yes)
     else:
         print(merged if not text else "\n".join(["[auto_review]", *lines]))
+        print(f"\n# {agents_md}:\n{RULE_BEGIN}\n{rule.rstrip()}\n{RULE_END}")
 
     if write:
         ensure_key(registry, resolved_home)

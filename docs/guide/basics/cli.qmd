@@ -227,6 +227,15 @@ Every setting it does not own is left where it is, the previous file is copied t
 - **Replacing `experimental_policy_template` or `extra_policy`** — asked only when a previous run
   (or you) already set them, and the default is no. Declining writes nothing at all.
 
+- **Writing the standing rule for the model** — into `AGENTS.md` beside the config
+  (`$CODEX_HOME/AGENTS.md`), between `<!-- sib:begin -->` and `<!-- sib:end -->` markers so a
+  later run replaces it in place and everything else in the file stays. The rule tells Codex to run
+  `sib verify` before following an instruction file that holds a signed block, and to let a
+  verified block take precedence over unsigned text whatever the order. It is for instructions that
+  need no tool call, which the reviewer never sees; see [Instructions Without a Tool
+  Call](../integration/codex.qmd#instructions-without-a-tool-call). The default is yes, and an
+  existing file is copied to `AGENTS.md.sib-bak` first.
+
 - **Enrolling a signing key** — asked last, and only when no passkey is enrolled, which is exactly
   when the install cannot yet produce a signature that proves a person was there. With no keys at
   all, every block verifies as `unknown_signer`: the safe direction, and an inert one. With only
@@ -238,9 +247,9 @@ Every setting it does not own is left where it is, the previous file is copied t
 Writing the file is not among the questions: it is what the command does, `--print` is how you look
 without writing, and the previous config is copied to `.sib-bak` first rather than discarded.
 
-The configuration is all it writes. Signing is a command the user runs — `!sib sign "..."` from
-inside Codex, which runs in their shell and may open the browser the ceremony needs, or the same
-in their own terminal. It is not something an agent can do on their behalf: the ceremony needs
+The configuration and that rule are all it writes. Signing is a command the user runs —
+`!sib sign "..."` from inside Codex, which runs in their shell and may open the browser the
+ceremony needs, or the same in their own terminal. It is not something an agent can do on their behalf: the ceremony needs
 their authenticator, and the sandbox around the agent's own commands denies it the loopback
 listener in any case.
 
@@ -270,7 +279,7 @@ verifies nothing.
   any repository; an agent that can write there can enroll its own key.
 
 `--print`
-: Print the configuration and write nothing.
+: Print the configuration and the standing rule, and write nothing.
 
 `--yes`
 : Answer yes to every question, for scripting. A reviewer you set to another value is still kept.
