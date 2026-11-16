@@ -16,7 +16,7 @@ The Python API, one page per module. The [CLI](../guide/basics/cli.qmd) is docum
 | [sib.verify](verify.qmd) | The deterministic verifier and its statuses |
 | [sib.manifest](manifest.qmd) | Provenance manifest and the classifier note |
 | [sib.nonce_store](nonce_store.qmd) | Replay control (no-op in Phase 1) |
-| [sib.classifier](classifier.qmd) | Reference permission classifier and its backends |
+| [sib.classifier](classifier.qmd) | The reference policy an integrator gives their own classifier (SIB ships no classifier) |
 | [sib.hooks](hooks.qmd) | Claude Code hooks (UserPromptSubmit, PostToolUse) and installer |
 | [sib.cli](cli.qmd) | The `sib` command-line interface |
 | [sib.b64](b64.qmd) | base64url helpers |
