@@ -145,7 +145,7 @@ without any model calls.
 To have Claude Code run the hooks on every tool call in a project:
 
 ```bash
-uv run --project "$OLDPWD" python -m sib.hooks.claude_code.install --project /tmp/mathlib
+uv run --project "$OLDPWD" sib install claude-code --project /tmp/mathlib
 ```
 
 The installer writes the hook entries and prints the `autoMode` rule to add to

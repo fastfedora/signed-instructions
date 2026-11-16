@@ -152,6 +152,13 @@ def cmd_inspect(a):
         print("signature:", parts[-1][:32] + "...")
 
 
+def cmd_install(a):
+    from .hooks.claude_code.install import run_install
+    run_install(project=a.project, settings_json=a.settings_json,
+                layers=tuple(x for x in a.layers.split(",") if x),
+                no_prose=a.no_prose, print_auto_mode=a.print_auto_mode)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="sib", description="Signed Instruction Blocks (dev mode)")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -174,6 +181,11 @@ def main(argv=None):
     v = sub.add_parser("verify", help="verify every block in a file"); v.add_argument("file")
     v.add_argument("--audience"); v.add_argument("--enforced", action="store_true"); v.add_argument("--json", action="store_true")
     v.set_defaults(fn=cmd_verify)
+    n = sub.add_parser("install", help="install the SIB hooks into an agent harness")
+    n.add_argument("harness", choices=["claude-code"], help="the harness to install into")
+    from .hooks.claude_code.install import add_arguments as _install_args
+    _install_args(n)
+    n.set_defaults(fn=cmd_install)
     i = sub.add_parser("inspect", help="decode blocks without verifying"); i.add_argument("file"); i.set_defaults(fn=cmd_inspect)
     a = ap.parse_args(argv)
     if a.cmd == "keygen" and a.enroll and not a.signer:

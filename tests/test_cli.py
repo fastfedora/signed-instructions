@@ -1,5 +1,6 @@
 """CLI identifier defaults: either the signer or the kid is enough."""
 import datetime as dt
+import json
 import subprocess
 import sys
 
@@ -72,3 +73,39 @@ def test_sign_text_flag(sib_home):
     assert rc == 0 and "\nDeploy to staging.\n-----BEGIN SIB SIGNATURE-----" in out
     rc, out, err = run(["sign", "--signer", "alice@example.com", "--text", "x", "--file", "-"], stdin="y")
     assert rc != 0 and "not both" in err
+
+
+def test_install_writes_one_settings_file(sib_home, tmp_path):
+    out = tmp_path / "sib-settings.json"
+    rc, so, se = run(["install", "claude-code", "--settings-json", str(out)])
+    assert rc == 0
+    d = json.loads(out.read_text())
+    assert sorted(d["hooks"]) == ["PostToolUse", "UserPromptSubmit"]
+    # the autoMode rule must be inert where no provenance note is delivered
+    assert "does not apply at all" in d["autoMode"]["soft_deny"][1]
+
+
+def test_install_into_a_project(sib_home, tmp_path):
+    repo = tmp_path / "repo"; repo.mkdir()
+    rc, so, se = run(["install", "claude-code", "--project", str(repo)])
+    assert rc == 0
+    d = json.loads((repo / ".claude" / "settings.json").read_text())
+    assert "PostToolUse" in d["hooks"] and "autoMode" not in d   # project settings never carry autoMode
+    assert "~/.claude/settings.json" in so
+
+
+def test_install_layers_and_no_target(sib_home, tmp_path):
+    out = tmp_path / "s.json"
+    rc, so, se = run(["install", "claude-code", "--settings-json", str(out), "--layers", "post", "--no-prose"])
+    assert rc == 0
+    d = json.loads(out.read_text())
+    assert sorted(d["hooks"]) == ["PostToolUse"] and "autoMode" not in d
+    rc, so, se = run(["install", "claude-code"])
+    assert rc != 0 and "nothing to do" in se
+
+
+def test_module_entry_point_still_works(tmp_path):
+    out = tmp_path / "m.json"
+    p = subprocess.run([sys.executable, "-m", "sib.hooks.claude_code.install", "--settings-json", str(out)],
+                       capture_output=True, text=True)
+    assert p.returncode == 0 and json.loads(out.read_text())["hooks"]
